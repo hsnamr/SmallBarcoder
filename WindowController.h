@@ -31,6 +31,8 @@ NS_ASSUME_NONNULL_BEGIN
     NSButton *applyDistortionButton;
     NSButton *clearDistortionButton;
     NSButton *previewDistortionButton;
+    NSButton *loadLibraryButton;
+    NSMutableArray *loadedLibraries; // Array of DynamicLibrary objects
     BarcodeDecoder *decoder;
     BarcodeEncoder *encoder;
     ImageDistorter *distorter;
@@ -56,6 +58,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (retain, nonatomic) NSButton *applyDistortionButton;
 @property (retain, nonatomic) NSButton *clearDistortionButton;
 @property (retain, nonatomic) NSButton *previewDistortionButton;
+@property (retain, nonatomic) NSButton *loadLibraryButton;
+@property (retain, nonatomic) NSMutableArray *loadedLibraries;
 @property (retain, nonatomic) BarcodeDecoder *decoder;
 @property (retain, nonatomic) BarcodeEncoder *encoder;
 @property (retain, nonatomic) ImageDistorter *distorter;

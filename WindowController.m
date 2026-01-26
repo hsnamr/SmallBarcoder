@@ -9,6 +9,7 @@
 #import "BarcodeDecoder.h"
 #import "BarcodeEncoder.h"
 #import "ImageDistorter.h"
+#import "DynamicLibraryLoader.h"
 #import "../SmallStep/SmallStep/Core/SmallStep.h"
 
 @interface WindowController (Private)
@@ -23,6 +24,8 @@
 - (void)saveImageToURL:(NSURL *)url;
 - (void)updateDistortionLabels;
 - (void)applyDistortionToCurrentImage;
+- (void)loadLibraryFromURL:(NSURL *)url;
+- (void)updateLibraryStatus;
 
 @end
 
@@ -45,6 +48,8 @@
 @synthesize applyDistortionButton;
 @synthesize clearDistortionButton;
 @synthesize previewDistortionButton;
+@synthesize loadLibraryButton;
+@synthesize loadedLibraries;
 @synthesize decoder;
 @synthesize encoder;
 @synthesize distorter;
@@ -58,6 +63,7 @@
         decoder = [[BarcodeDecoder alloc] init];
         encoder = [[BarcodeEncoder alloc] init];
         distorter = [[ImageDistorter alloc] init];
+        loadedLibraries = [[NSMutableArray alloc] init];
         [self setupWindow];
     }
     return self;
@@ -84,6 +90,8 @@
     [decoder release];
     [encoder release];
     [distorter release];
+    [loadLibraryButton release];
+    [loadedLibraries release];
     [currentImage release];
     [originalImage release];
     [originalEncodedData release];
@@ -288,6 +296,16 @@
     [self.clearDistortionButton setAction:@selector(clearDistortion:)];
     [self.clearDistortionButton setEnabled:NO];
     [contentView addSubview:self.clearDistortionButton];
+    
+    // Load Library button
+    NSRect loadLibraryRect = NSMakeRect(20, 50, 120, 32);
+    self.loadLibraryButton = [[NSButton alloc] initWithFrame:loadLibraryRect];
+    [self.loadLibraryButton setTitle:@"Load Library..."];
+    [self.loadLibraryButton setButtonType:NSMomentaryPushInButton];
+    [self.loadLibraryButton setBezelStyle:NSRoundedBezelStyle];
+    [self.loadLibraryButton setTarget:self];
+    [self.loadLibraryButton setAction:@selector(loadLibrary:)];
+    [contentView addSubview:self.loadLibraryButton];
     
     [self updateDistortionLabels];
 }
@@ -780,7 +798,77 @@
     }
 }
 
+- (void)loadLibrary:(id)sender {
+    SSFileDialog *dialog = [SSFileDialog openDialog];
+    [dialog setCanChooseFiles:YES];
+    [dialog setCanChooseDirectories:NO];
+    [dialog setAllowsMultipleSelection:NO];
+    
+    NSString *extension = [DynamicLibraryLoader libraryExtension];
+    [dialog setAllowedFileTypes:[NSArray arrayWithObjects:extension, nil]];
+    
+#if TARGET_OS_MAC && !TARGET_OS_IPHONE
+    [dialog showWithCompletionHandler:^(SSFileDialogResult result, NSArray *urls) {
+        if (result == SSFileDialogResultOK && urls.count > 0) {
+            NSURL *fileURL = [urls objectAtIndex:0];
+            [self loadLibraryFromURL:fileURL];
+        }
+    }];
+#else
+    NSArray *urls = [dialog showModal];
+    if (urls && urls.count > 0) {
+        NSURL *fileURL = [urls objectAtIndex:0];
+        [self loadLibraryFromURL:fileURL];
+    }
+#endif
+}
+
+- (void)loadLibraryFromURL:(NSURL *)url {
+    NSError *error = nil;
+    DynamicLibrary *library = [DynamicLibraryLoader loadLibraryAtPath:[url path] error:&error];
+    
+    if (!library) {
+        NSString *errorMsg = error ? [error localizedDescription] : [DynamicLibraryLoader lastError];
+        [self.textView setString:[NSString stringWithFormat:@"Failed to load library:\n%@\n\nError: %@", [url path], errorMsg ? errorMsg : @"Unknown error"]];
+        return;
+    }
+    
+    // Add to loaded libraries list
+    [self.loadedLibraries addObject:library];
+    
+    // Update status
+    [self updateLibraryStatus];
+    
+    // Try to refresh backends (this would require backend system updates)
+    // For now, just show success message
+    NSMutableString *msg = [NSMutableString string];
+    [msg appendString:@"Library Loaded Successfully\n"];
+    [msg appendString:@"==========================\n\n"];
+    [msg appendFormat:@"Path: %@\n", [url path]];
+    [msg appendFormat:@"Total libraries loaded: %ld\n\n", (long)self.loadedLibraries.count];
+    [msg appendString:@"Note: Backend system integration for dynamic loading is in progress.\n"];
+    [msg appendString:@"Static backends are still available."];
+    
+    [self.textView setString:msg];
+}
+
+- (void)updateLibraryStatus {
+    // Update UI to show loaded libraries
+    // This could be enhanced to show library list in a separate view
+    if (self.loadedLibraries.count > 0) {
+        // Libraries are loaded
+    }
+}
+
 - (void)windowWillClose:(NSNotification *)notification {
+    // Unload all libraries before closing
+    NSInteger i;
+    for (i = 0; i < self.loadedLibraries.count; i++) {
+        DynamicLibrary *library = [self.loadedLibraries objectAtIndex:i];
+        [DynamicLibraryLoader unloadLibrary:library];
+    }
+    [self.loadedLibraries removeAllObjects];
+    
     [NSApp terminate:nil];
 }
 
