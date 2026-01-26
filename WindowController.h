@@ -9,6 +9,7 @@
 
 @class BarcodeDecoder;
 @class BarcodeEncoder;
+@class ImageDistorter;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -22,9 +23,19 @@ NS_ASSUME_NONNULL_BEGIN
     NSButton *saveButton;
     NSTextField *encodeTextField;
     NSPopUpButton *symbologyPopup;
+    NSPopUpButton *distortionTypePopup;
+    NSSlider *distortionIntensitySlider;
+    NSSlider *distortionStrengthSlider;
+    NSTextField *distortionIntensityLabel;
+    NSTextField *distortionStrengthLabel;
+    NSButton *applyDistortionButton;
+    NSButton *clearDistortionButton;
+    NSButton *previewDistortionButton;
     BarcodeDecoder *decoder;
     BarcodeEncoder *encoder;
+    ImageDistorter *distorter;
     NSImage *currentImage;
+    NSImage *originalImage; // Original image before distortions
     NSString *originalEncodedData; // Track original input for matching
 }
 
@@ -37,9 +48,19 @@ NS_ASSUME_NONNULL_BEGIN
 @property (retain, nonatomic) NSButton *saveButton;
 @property (retain, nonatomic) NSTextField *encodeTextField;
 @property (retain, nonatomic) NSPopUpButton *symbologyPopup;
+@property (retain, nonatomic) NSPopUpButton *distortionTypePopup;
+@property (retain, nonatomic) NSSlider *distortionIntensitySlider;
+@property (retain, nonatomic) NSSlider *distortionStrengthSlider;
+@property (retain, nonatomic) NSTextField *distortionIntensityLabel;
+@property (retain, nonatomic) NSTextField *distortionStrengthLabel;
+@property (retain, nonatomic) NSButton *applyDistortionButton;
+@property (retain, nonatomic) NSButton *clearDistortionButton;
+@property (retain, nonatomic) NSButton *previewDistortionButton;
 @property (retain, nonatomic) BarcodeDecoder *decoder;
 @property (retain, nonatomic) BarcodeEncoder *encoder;
+@property (retain, nonatomic) ImageDistorter *distorter;
 @property (retain, nonatomic) NSImage *currentImage;
+@property (retain, nonatomic) NSImage *originalImage;
 @property (retain, nonatomic) NSString *originalEncodedData;
 
 @end

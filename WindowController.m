@@ -8,6 +8,7 @@
 #import "WindowController.h"
 #import "BarcodeDecoder.h"
 #import "BarcodeEncoder.h"
+#import "ImageDistorter.h"
 #import "../SmallStep/SmallStep/Core/SmallStep.h"
 
 @interface WindowController (Private)
@@ -18,7 +19,10 @@
 - (void)encodeInBackground:(id)object;
 - (void)updateEncodedImage:(NSImage *)image;
 - (void)populateSymbologyPopup;
+- (void)populateDistortionTypePopup;
 - (void)saveImageToURL:(NSURL *)url;
+- (void)updateDistortionLabels;
+- (void)applyDistortionToCurrentImage;
 
 @end
 
@@ -33,9 +37,19 @@
 @synthesize saveButton;
 @synthesize encodeTextField;
 @synthesize symbologyPopup;
+@synthesize distortionTypePopup;
+@synthesize distortionIntensitySlider;
+@synthesize distortionStrengthSlider;
+@synthesize distortionIntensityLabel;
+@synthesize distortionStrengthLabel;
+@synthesize applyDistortionButton;
+@synthesize clearDistortionButton;
+@synthesize previewDistortionButton;
 @synthesize decoder;
 @synthesize encoder;
+@synthesize distorter;
 @synthesize currentImage;
+@synthesize originalImage;
 @synthesize originalEncodedData;
 
 - (instancetype)init {
@@ -43,6 +57,7 @@
     if (self) {
         decoder = [[BarcodeDecoder alloc] init];
         encoder = [[BarcodeEncoder alloc] init];
+        distorter = [[ImageDistorter alloc] init];
         [self setupWindow];
     }
     return self;
@@ -58,9 +73,19 @@
     [saveButton release];
     [encodeTextField release];
     [symbologyPopup release];
+    [distortionTypePopup release];
+    [distortionIntensitySlider release];
+    [distortionStrengthSlider release];
+    [distortionIntensityLabel release];
+    [distortionStrengthLabel release];
+    [applyDistortionButton release];
+    [clearDistortionButton release];
+    [previewDistortionButton release];
     [decoder release];
     [encoder release];
+    [distorter release];
     [currentImage release];
+    [originalImage release];
     [originalEncodedData release];
     [super dealloc];
 }
@@ -187,6 +212,84 @@
     [self.saveButton setAction:@selector(saveImage:)];
     [self.saveButton setEnabled:NO];
     [contentView addSubview:self.saveButton];
+    
+    // Distortion controls section
+    // Distortion type popup
+    NSRect distortionPopupRect = NSMakeRect(20, 180, 150, 24);
+    self.distortionTypePopup = [[NSPopUpButton alloc] initWithFrame:distortionPopupRect pullsDown:NO];
+    [self populateDistortionTypePopup];
+    [contentView addSubview:self.distortionTypePopup];
+    
+    // Intensity slider
+    NSRect intensitySliderRect = NSMakeRect(20, 150, 200, 20);
+    self.distortionIntensitySlider = [[NSSlider alloc] initWithFrame:intensitySliderRect];
+    [self.distortionIntensitySlider setMinValue:0.0];
+    [self.distortionIntensitySlider setMaxValue:1.0];
+    [self.distortionIntensitySlider setDoubleValue:0.5];
+    [self.distortionIntensitySlider setTarget:self];
+    [self.distortionIntensitySlider setAction:@selector(updateDistortionLabels)];
+    [contentView addSubview:self.distortionIntensitySlider];
+    
+    // Intensity label
+    NSRect intensityLabelRect = NSMakeRect(230, 150, 100, 20);
+    self.distortionIntensityLabel = [[NSTextField alloc] initWithFrame:intensityLabelRect];
+    [self.distortionIntensityLabel setEditable:NO];
+    [self.distortionIntensityLabel setBordered:NO];
+    [self.distortionIntensityLabel setBackgroundColor:[NSColor controlBackgroundColor]];
+    [contentView addSubview:self.distortionIntensityLabel];
+    
+    // Strength slider
+    NSRect strengthSliderRect = NSMakeRect(20, 120, 200, 20);
+    self.distortionStrengthSlider = [[NSSlider alloc] initWithFrame:strengthSliderRect];
+    [self.distortionStrengthSlider setMinValue:0.0];
+    [self.distortionStrengthSlider setMaxValue:1.0];
+    [self.distortionStrengthSlider setDoubleValue:0.5];
+    [self.distortionStrengthSlider setTarget:self];
+    [self.distortionStrengthSlider setAction:@selector(updateDistortionLabels)];
+    [contentView addSubview:self.distortionStrengthSlider];
+    
+    // Strength label
+    NSRect strengthLabelRect = NSMakeRect(230, 120, 100, 20);
+    self.distortionStrengthLabel = [[NSTextField alloc] initWithFrame:strengthLabelRect];
+    [self.distortionStrengthLabel setEditable:NO];
+    [self.distortionStrengthLabel setBordered:NO];
+    [self.distortionStrengthLabel setBackgroundColor:[NSColor controlBackgroundColor]];
+    [contentView addSubview:self.distortionStrengthLabel];
+    
+    // Apply distortion button
+    NSRect applyDistortionRect = NSMakeRect(20, 90, 100, 32);
+    self.applyDistortionButton = [[NSButton alloc] initWithFrame:applyDistortionRect];
+    [self.applyDistortionButton setTitle:@"Apply Distortion"];
+    [self.applyDistortionButton setButtonType:NSMomentaryPushInButton];
+    [self.applyDistortionButton setBezelStyle:NSRoundedBezelStyle];
+    [self.applyDistortionButton setTarget:self];
+    [self.applyDistortionButton setAction:@selector(applyDistortion:)];
+    [self.applyDistortionButton setEnabled:NO];
+    [contentView addSubview:self.applyDistortionButton];
+    
+    // Preview distortion button
+    NSRect previewDistortionRect = NSMakeRect(130, 90, 100, 32);
+    self.previewDistortionButton = [[NSButton alloc] initWithFrame:previewDistortionRect];
+    [self.previewDistortionButton setTitle:@"Preview"];
+    [self.previewDistortionButton setButtonType:NSMomentaryPushInButton];
+    [self.previewDistortionButton setBezelStyle:NSRoundedBezelStyle];
+    [self.previewDistortionButton setTarget:self];
+    [self.previewDistortionButton setAction:@selector(previewDistortion:)];
+    [self.previewDistortionButton setEnabled:NO];
+    [contentView addSubview:self.previewDistortionButton];
+    
+    // Clear distortion button
+    NSRect clearDistortionRect = NSMakeRect(240, 90, 100, 32);
+    self.clearDistortionButton = [[NSButton alloc] initWithFrame:clearDistortionRect];
+    [self.clearDistortionButton setTitle:@"Clear"];
+    [self.clearDistortionButton setButtonType:NSMomentaryPushInButton];
+    [self.clearDistortionButton setBezelStyle:NSRoundedBezelStyle];
+    [self.clearDistortionButton setTarget:self];
+    [self.clearDistortionButton setAction:@selector(clearDistortion:)];
+    [self.clearDistortionButton setEnabled:NO];
+    [contentView addSubview:self.clearDistortionButton];
+    
+    [self updateDistortionLabels];
 }
 
 - (void)openImage:(id)sender {
@@ -216,11 +319,16 @@
     NSImage *image = [[NSImage alloc] initWithContentsOfURL:url];
     if (image) {
         self.currentImage = image;
+        self.originalImage = image; // Store as original
         [self.imageView setImage:image];
         [self.decodeButton setEnabled:YES];
-        // Clear original encoded data when loading external image
+        [self.applyDistortionButton setEnabled:YES];
+        [self.previewDistortionButton setEnabled:YES];
+        // Clear original encoded data and distortions when loading external image
         self.originalEncodedData = nil;
-        [self.textView setString:[NSString stringWithFormat:@"Image loaded: %@\n\nClick 'Decode' to scan for barcodes.", [url lastPathComponent]]];
+        [self.distorter clearDistortions];
+        [self.clearDistortionButton setEnabled:NO];
+        [self.textView setString:[NSString stringWithFormat:@"Image loaded: %@\n\nClick 'Decode' to scan for barcodes, or apply distortions to test decodability.", [url lastPathComponent]]];
     } else {
         // Show error in text view instead of popup
         [self.textView setString:[NSString stringWithFormat:@"Error: Could not load image from:\n%@\n\nPlease ensure the file exists and is a valid image format (JPEG, PNG, TIFF).", url]];
@@ -462,10 +570,18 @@
         return;
     }
     
+    // Store as original before applying any distortions
+    self.originalImage = image;
     self.currentImage = image;
     [self.imageView setImage:image];
     [self.decodeButton setEnabled:YES];
     [self.saveButton setEnabled:YES];
+    [self.applyDistortionButton setEnabled:YES];
+    [self.previewDistortionButton setEnabled:YES];
+    
+    // Clear any previous distortions
+    [self.distorter clearDistortions];
+    [self.clearDistortionButton setEnabled:NO];
     
     NSMutableString *output = [NSMutableString string];
     [output appendString:@"Barcode Encoded Successfully\n"];
@@ -475,6 +591,7 @@
     [output appendString:@"\n"];
     [output appendString:@"The barcode image is displayed on the left.\n"];
     [output appendString:@"You can:\n"];
+    [output appendString:@"- Apply distortions to test decodability limits\n"];
     [output appendString:@"- Click 'Decode' to verify it can be read\n"];
     [output appendString:@"- Click 'Save Image...' to save it to a file"];
     
@@ -563,6 +680,103 @@
         }
     } else {
         [self.textView setString:@"Error: Could not create image data."];
+    }
+}
+
+- (void)populateDistortionTypePopup {
+    [self.distortionTypePopup removeAllItems];
+    
+    NSArray *types = [ImageDistorter availableDistortionTypes];
+    NSInteger i;
+    for (i = 0; i < types.count; i++) {
+        NSNumber *typeNum = [types objectAtIndex:i];
+        DistortionType type = (DistortionType)[typeNum intValue];
+        NSString *name = [ImageDistorter nameForDistortionType:type];
+        [self.distortionTypePopup addItemWithTitle:name];
+        [[self.distortionTypePopup itemAtIndex:i] setTag:type];
+    }
+}
+
+- (void)updateDistortionLabels {
+    float intensity = [self.distortionIntensitySlider floatValue];
+    float strength = [self.distortionStrengthSlider floatValue];
+    
+    [self.distortionIntensityLabel setStringValue:[NSString stringWithFormat:@"Intensity: %.2f", intensity]];
+    [self.distortionStrengthLabel setStringValue:[NSString stringWithFormat:@"Strength: %.2f", strength]];
+}
+
+- (void)applyDistortion:(id)sender {
+    if (!self.currentImage) {
+        return;
+    }
+    
+    [self applyDistortionToCurrentImage];
+}
+
+- (void)previewDistortion:(id)sender {
+    if (!self.currentImage) {
+        return;
+    }
+    
+    // Create temporary distortion for preview
+    NSInteger selectedIndex = [self.distortionTypePopup indexOfSelectedItem];
+    if (selectedIndex < 0) {
+        return;
+    }
+    
+    DistortionType type = (DistortionType)[[self.distortionTypePopup selectedItem] tag];
+    float intensity = [self.distortionIntensitySlider floatValue];
+    float strength = [self.distortionStrengthSlider floatValue];
+    
+    DistortionParameters *params = [DistortionParameters parametersWithType:type intensity:intensity strength:strength];
+    NSImage *previewImage = [ImageDistorter applyDistortion:params toImage:self.currentImage];
+    
+    if (previewImage) {
+        [self.imageView setImage:previewImage];
+        [self.textView setString:@"Preview: Distortion applied. Click 'Apply Distortion' to make it permanent, or 'Clear' to restore original."];
+    }
+}
+
+- (void)clearDistortion:(id)sender {
+    [self.distorter clearDistortions];
+    
+    if (self.originalImage) {
+        self.currentImage = self.originalImage;
+        [self.imageView setImage:self.currentImage];
+        [self.textView setString:@"Distortions cleared. Original image restored."];
+    }
+    
+    [self.clearDistortionButton setEnabled:NO];
+}
+
+- (void)applyDistortionToCurrentImage {
+    NSInteger selectedIndex = [self.distortionTypePopup indexOfSelectedItem];
+    if (selectedIndex < 0) {
+        return;
+    }
+    
+    DistortionType type = (DistortionType)[[self.distortionTypePopup selectedItem] tag];
+    float intensity = [self.distortionIntensitySlider floatValue];
+    float strength = [self.distortionStrengthSlider floatValue];
+    
+    DistortionParameters *params = [DistortionParameters parametersWithType:type intensity:intensity strength:strength];
+    [self.distorter addDistortion:params];
+    
+    // Store original image if not already stored
+    if (!self.originalImage) {
+        self.originalImage = [self.currentImage retain];
+    }
+    
+    // Apply all distortions
+    NSImage *distortedImage = [self.distorter applyDistortionsToImage:self.originalImage];
+    if (distortedImage) {
+        self.currentImage = distortedImage;
+        [self.imageView setImage:self.currentImage];
+        [self.decodeButton setEnabled:YES];
+        [self.clearDistortionButton setEnabled:YES];
+        
+        NSInteger distortionCount = [self.distorter distortions].count;
+        [self.textView setString:[NSString stringWithFormat:@"Distortion applied. Total distortions: %ld\n\nYou can apply more distortions or decode the image.", (long)distortionCount]];
     }
 }
 
