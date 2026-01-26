@@ -20,7 +20,13 @@
 
 + (BOOL)isAvailable {
 #if ZBAR_AVAILABLE
+  #if defined(DYNAMIC_ONLY)
+    // In dynamic-only mode, check if library is actually loaded at runtime
+    // For now, return NO - backends must be loaded via dynamic library loading
+    return NO;
+  #else
     return YES;
+  #endif
 #else
     return NO;
 #endif

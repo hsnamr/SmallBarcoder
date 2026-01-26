@@ -1,8 +1,15 @@
 # GNUmakefile for SmallBarcodeReader (Linux/GNUStep)
+#
+# Build options:
+#   make DYNAMIC_ONLY=1    - Build without static library linking (dynamic loading only)
+#   make                    - Build with static linking if libraries are available (default)
 
 include $(GNUSTEP_MAKEFILES)/common.make
 
 APP_NAME = SmallBarcodeReader
+
+# Check if dynamic-only build is requested
+DYNAMIC_ONLY ?= 0
 
 # Try to find ZBar headers and library (must be before OBJC_FILES to use in conditionals)
 ZBAR_INCLUDE := $(shell pkg-config --cflags zbar 2>/dev/null)
@@ -61,15 +68,29 @@ SmallBarcodeReader_OBJC_FILES = \
 	ui/WindowController.m
 
 # Conditionally add ZBar files only if both headers and library are available
-ifneq ($(ZBAR_INCLUDE),)
-  ifneq ($(ZBAR_LIBS),)
+# Skip if DYNAMIC_ONLY=1
+ifeq ($(DYNAMIC_ONLY),0)
+  ifneq ($(ZBAR_INCLUDE),)
+    ifneq ($(ZBAR_LIBS),)
+      SmallBarcodeReader_OBJC_FILES += decoder/BarcodeDecoderZBar.m
+    endif
+  endif
+
+  # Conditionally add ZInt files only if both headers and library are available
+  ifneq ($(ZINT_INCLUDE),)
+    ifneq ($(ZINT_LIBS),)
+      SmallBarcodeReader_OBJC_FILES += decoder/BarcodeDecoderZInt.m
+      SmallBarcodeReader_OBJC_FILES += encoder/BarcodeEncoderZInt.m
+    endif
+  endif
+else
+  # Dynamic-only build: still compile backend files but don't link libraries
+  # This allows the code to be present but backends won't be available at compile time
+  # They can be loaded dynamically at runtime
+  ifneq ($(ZBAR_INCLUDE),)
     SmallBarcodeReader_OBJC_FILES += decoder/BarcodeDecoderZBar.m
   endif
-endif
-
-# Conditionally add ZInt files only if both headers and library are available
-ifneq ($(ZINT_INCLUDE),)
-  ifneq ($(ZINT_LIBS),)
+  ifneq ($(ZINT_INCLUDE),)
     SmallBarcodeReader_OBJC_FILES += decoder/BarcodeDecoderZInt.m
     SmallBarcodeReader_OBJC_FILES += encoder/BarcodeEncoderZInt.m
   endif
@@ -116,21 +137,35 @@ SmallBarcodeReader_INCLUDE_DIRS = \
 	-I../SmallStep/SmallStep/Platform/Linux \
 	$(ZINT_INCLUDE)
 
-# Conditionally add ZBar include and define HAVE_ZBAR only if ZBar backend is being compiled
+# Conditionally add ZBar include and define HAVE_ZBAR
+# In dynamic-only mode, still include headers but don't link library
 ifneq ($(ZBAR_INCLUDE),)
-  ifneq ($(ZBAR_LIBS),)
-    SmallBarcodeReader_INCLUDE_DIRS += $(ZBAR_INCLUDE)
-    # Define HAVE_ZBAR when both headers and library are available
-    SmallBarcodeReader_OBJCFLAGS += -DHAVE_ZBAR=1
+  SmallBarcodeReader_INCLUDE_DIRS += $(ZBAR_INCLUDE)
+  ifeq ($(DYNAMIC_ONLY),0)
+    ifneq ($(ZBAR_LIBS),)
+      # Define HAVE_ZBAR when both headers and library are available (static linking)
+      SmallBarcodeReader_OBJCFLAGS += -DHAVE_ZBAR=1
+    endif
+  else
+    # Dynamic-only: define HAVE_ZBAR if headers are available (for compilation)
+    # But don't link the library - it will be loaded at runtime
+    SmallBarcodeReader_OBJCFLAGS += -DHAVE_ZBAR=1 -DDYNAMIC_ONLY=1
   endif
 endif
 
-# Conditionally add ZInt include and define HAVE_ZINT only if ZInt backend is being compiled
+# Conditionally add ZInt include and define HAVE_ZINT
+# In dynamic-only mode, still include headers but don't link library
 ifneq ($(ZINT_INCLUDE),)
-  ifneq ($(ZINT_LIBS),)
-    SmallBarcodeReader_INCLUDE_DIRS += $(ZINT_INCLUDE)
-    # Define HAVE_ZINT when both headers and library are available
-    SmallBarcodeReader_OBJCFLAGS += -DHAVE_ZINT=1
+  SmallBarcodeReader_INCLUDE_DIRS += $(ZINT_INCLUDE)
+  ifeq ($(DYNAMIC_ONLY),0)
+    ifneq ($(ZINT_LIBS),)
+      # Define HAVE_ZINT when both headers and library are available (static linking)
+      SmallBarcodeReader_OBJCFLAGS += -DHAVE_ZINT=1
+    endif
+  else
+    # Dynamic-only: define HAVE_ZINT if headers are available (for compilation)
+    # But don't link the library - it will be loaded at runtime
+    SmallBarcodeReader_OBJCFLAGS += -DHAVE_ZINT=1 -DDYNAMIC_ONLY=1
   endif
 endif
 
@@ -161,13 +196,16 @@ ZINT_LIB_PATH := $(shell echo "$(ZINT_LIBS)" | grep -o '\-L[^ ]*' || echo "")
 LIBRARIES := -lobjc -lgnustep-gui -lgnustep-base
 
 # Add ZInt if available (optional - only if library was found)
-ifneq ($(ZINT_LIBS),)
-  LIBRARIES += $(ZINT_LIBS)
-endif
+# Skip in dynamic-only mode
+ifeq ($(DYNAMIC_ONLY),0)
+  ifneq ($(ZINT_LIBS),)
+    LIBRARIES += $(ZINT_LIBS)
+  endif
 
-# Add ZBar if available (optional - only if library was found)
-ifneq ($(ZBAR_LIBS),)
-  LIBRARIES += $(ZBAR_LIBS)
+  # Add ZBar if available (optional - only if library was found)
+  ifneq ($(ZBAR_LIBS),)
+    LIBRARIES += $(ZBAR_LIBS)
+  endif
 endif
 
 # Set library dependencies (library names)
@@ -189,14 +227,16 @@ SmallBarcodeReader_ADDITIONAL_LDFLAGS = $(SMALLSTEP_LIB_PATH) $(SMALLSTEP_LDFLAG
 
 # Add to tool libraries (this is part of ALL_LIBS for applications)
 # Use TOOL_LIBS (not ADDITIONAL_TOOL_LIBS) as per GNUstep rules
-# ZInt and ZBar are optional - only link if available
+# ZInt and ZBar are optional - only link if available and not in dynamic-only mode
 # SmallStep is required
 TOOL_LIBS_LIST = -lSmallStep
-ifneq ($(ZINT_LIBS),)
-  TOOL_LIBS_LIST += $(ZINT_LIBS)
-endif
-ifneq ($(ZBAR_LIBS),)
-  TOOL_LIBS_LIST += $(ZBAR_LIBS)
+ifeq ($(DYNAMIC_ONLY),0)
+  ifneq ($(ZINT_LIBS),)
+    TOOL_LIBS_LIST += $(ZINT_LIBS)
+  endif
+  ifneq ($(ZBAR_LIBS),)
+    TOOL_LIBS_LIST += $(ZBAR_LIBS)
+  endif
 endif
 SmallBarcodeReader_TOOL_LIBS = $(TOOL_LIBS_LIST)
 
