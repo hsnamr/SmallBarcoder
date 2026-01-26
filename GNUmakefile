@@ -49,54 +49,54 @@ endif
 # Base Objective-C files (always compiled)
 SmallBarcodeReader_OBJC_FILES = \
 	main.m \
-	AppDelegate.m \
-	BarcodeDecoder.m \
-	BarcodeEncoder.m \
-	ImageMatrix.m \
-	ImageDistorter.m \
-	DynamicLibraryLoader.m \
-	BarcodeTestResult.m \
-	BarcodeTester.m \
-	WindowController.m
+	ui/AppDelegate.m \
+	decoder/BarcodeDecoder.m \
+	encoder/BarcodeEncoder.m \
+	image/ImageMatrix.m \
+	image/ImageDistorter.m \
+	core/DynamicLibraryLoader.m \
+	tester/BarcodeTestResult.m \
+	tester/BarcodeTester.m \
+	ui/WindowController.m
 
 # Conditionally add ZBar files only if both headers and library are available
 ifneq ($(ZBAR_INCLUDE),)
   ifneq ($(ZBAR_LIBS),)
-    SmallBarcodeReader_OBJC_FILES += BarcodeDecoderZBar.m
+    SmallBarcodeReader_OBJC_FILES += decoder/BarcodeDecoderZBar.m
   endif
 endif
 
 # Conditionally add ZInt files only if both headers and library are available
 ifneq ($(ZINT_INCLUDE),)
   ifneq ($(ZINT_LIBS),)
-    SmallBarcodeReader_OBJC_FILES += BarcodeDecoderZInt.m
-    SmallBarcodeReader_OBJC_FILES += BarcodeEncoderZInt.m
+    SmallBarcodeReader_OBJC_FILES += decoder/BarcodeDecoderZInt.m
+    SmallBarcodeReader_OBJC_FILES += encoder/BarcodeEncoderZInt.m
   endif
 endif
 
 # Base header files (always included)
 SmallBarcodeReader_HEADER_FILES = \
-	AppDelegate.h \
-	BarcodeDecoder.h \
-	BarcodeDecoderBackend.h \
-	BarcodeEncoder.h \
-	BarcodeEncoderBackend.h \
-	ImageMatrix.h \
-	ImageDistorter.h \
-	DynamicLibraryLoader.h \
-	BarcodeTestResult.h \
-	BarcodeTester.h \
-	WindowController.h
+	ui/AppDelegate.h \
+	decoder/BarcodeDecoder.h \
+	decoder/BarcodeDecoderBackend.h \
+	encoder/BarcodeEncoder.h \
+	encoder/BarcodeEncoderBackend.h \
+	image/ImageMatrix.h \
+	image/ImageDistorter.h \
+	core/DynamicLibraryLoader.h \
+	tester/BarcodeTestResult.h \
+	tester/BarcodeTester.h \
+	ui/WindowController.h
 
 # Conditionally add ZBar headers only if headers are available
 ifneq ($(ZBAR_INCLUDE),)
-  SmallBarcodeReader_HEADER_FILES += BarcodeDecoderZBar.h
+  SmallBarcodeReader_HEADER_FILES += decoder/BarcodeDecoderZBar.h
 endif
 
 # Conditionally add ZInt headers only if headers are available
 ifneq ($(ZINT_INCLUDE),)
-  SmallBarcodeReader_HEADER_FILES += BarcodeDecoderZInt.h
-  SmallBarcodeReader_HEADER_FILES += BarcodeEncoderZInt.h
+  SmallBarcodeReader_HEADER_FILES += decoder/BarcodeDecoderZInt.h
+  SmallBarcodeReader_HEADER_FILES += encoder/BarcodeEncoderZInt.h
 endif
 
 SmallBarcodeReader_RESOURCE_FILES = \
@@ -104,6 +104,12 @@ SmallBarcodeReader_RESOURCE_FILES = \
 
 SmallBarcodeReader_INCLUDE_DIRS = \
 	-I. \
+	-Iencoder \
+	-Idecoder \
+	-Itester \
+	-Icore \
+	-Iimage \
+	-Iui \
 	-I../SmallStep/SmallStep/Core \
 	-I../SmallStep/SmallStep/Platform/Linux \
 	$(ZINT_INCLUDE)
