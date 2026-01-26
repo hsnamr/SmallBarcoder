@@ -4,17 +4,67 @@ include $(GNUSTEP_MAKEFILES)/common.make
 
 APP_NAME = SmallBarcodeReader
 
+# Try to find ZBar headers and library (must be before OBJC_FILES to use in conditionals)
+ZBAR_INCLUDE := $(shell pkg-config --cflags zbar 2>/dev/null)
+ZBAR_LIBS := $(shell pkg-config --libs zbar 2>/dev/null)
+ifeq ($(ZBAR_INCLUDE),)
+  # Try common locations
+  ifneq ($(wildcard /usr/include/zbar.h),)
+    ZBAR_INCLUDE := -I/usr/include
+    # Check if library exists
+    ifneq ($(wildcard /usr/lib/x86_64-linux-gnu/libzbar.so),)
+      ZBAR_LIBS := -lzbar
+    else ifneq ($(wildcard /usr/lib/libzbar.so),)
+      ZBAR_LIBS := -lzbar
+    endif
+  else ifneq ($(wildcard /usr/local/include/zbar.h),)
+    ZBAR_INCLUDE := -I/usr/local/include
+    ifneq ($(wildcard /usr/local/lib/libzbar.so),)
+      ZBAR_LIBS := -lzbar
+    endif
+  endif
+endif
+
+# Try to find ZInt headers and library (must be before OBJC_FILES to use in conditionals)
+ZINT_INCLUDE := $(shell pkg-config --cflags zint 2>/dev/null)
+ZINT_LIBS := $(shell pkg-config --libs zint 2>/dev/null)
+ifeq ($(ZINT_INCLUDE),)
+  # Try common locations
+  ifneq ($(wildcard /usr/include/zint.h),)
+    ZINT_INCLUDE := -I/usr/include
+    # Check if library exists
+    ifneq ($(wildcard /usr/lib/x86_64-linux-gnu/libzint.so),)
+      ZINT_LIBS := -lzint
+    else ifneq ($(wildcard /usr/lib/libzint.so),)
+      ZINT_LIBS := -lzint
+    endif
+  else ifneq ($(wildcard /usr/local/include/zint.h),)
+    ZINT_INCLUDE := -I/usr/local/include
+    ifneq ($(wildcard /usr/local/lib/libzint.so),)
+      ZINT_LIBS := -lzint
+    endif
+  endif
+endif
+
 # Base Objective-C files (always compiled)
 SmallBarcodeReader_OBJC_FILES = \
 	main.m \
 	AppDelegate.m \
 	BarcodeDecoder.m \
-	BarcodeDecoderZInt.m \
 	WindowController.m
 
-# Conditionally add ZBar files only if headers are available
+# Conditionally add ZBar files only if both headers and library are available
 ifneq ($(ZBAR_INCLUDE),)
-  SmallBarcodeReader_OBJC_FILES += BarcodeDecoderZBar.m
+  ifneq ($(ZBAR_LIBS),)
+    SmallBarcodeReader_OBJC_FILES += BarcodeDecoderZBar.m
+  endif
+endif
+
+# Conditionally add ZInt files only if both headers and library are available
+ifneq ($(ZINT_INCLUDE),)
+  ifneq ($(ZINT_LIBS),)
+    SmallBarcodeReader_OBJC_FILES += BarcodeDecoderZInt.m
+  endif
 endif
 
 # Base header files (always included)
@@ -22,7 +72,6 @@ SmallBarcodeReader_HEADER_FILES = \
 	AppDelegate.h \
 	BarcodeDecoder.h \
 	BarcodeDecoderBackend.h \
-	BarcodeDecoderZInt.h \
 	WindowController.h
 
 # Conditionally add ZBar headers only if headers are available
@@ -30,30 +79,13 @@ ifneq ($(ZBAR_INCLUDE),)
   SmallBarcodeReader_HEADER_FILES += BarcodeDecoderZBar.h
 endif
 
+# Conditionally add ZInt headers only if headers are available
+ifneq ($(ZINT_INCLUDE),)
+  SmallBarcodeReader_HEADER_FILES += BarcodeDecoderZInt.h
+endif
+
 SmallBarcodeReader_RESOURCE_FILES = \
 	MainMenu.gorm
-
-# Try to find ZBar headers
-ZBAR_INCLUDE := $(shell pkg-config --cflags zbar 2>/dev/null)
-ifeq ($(ZBAR_INCLUDE),)
-  # Try common locations
-  ifneq ($(wildcard /usr/include/zbar.h),)
-    ZBAR_INCLUDE := -I/usr/include
-  else ifneq ($(wildcard /usr/local/include/zbar.h),)
-    ZBAR_INCLUDE := -I/usr/local/include
-  endif
-endif
-
-# Try to find ZInt headers
-ZINT_INCLUDE := $(shell pkg-config --cflags zint 2>/dev/null)
-ifeq ($(ZINT_INCLUDE),)
-  # Try common locations
-  ifneq ($(wildcard /usr/include/zint.h),)
-    ZINT_INCLUDE := -I/usr/include
-  else ifneq ($(wildcard /usr/local/include/zint.h),)
-    ZINT_INCLUDE := -I/usr/local/include
-  endif
-endif
 
 SmallBarcodeReader_INCLUDE_DIRS = \
 	-I. \
@@ -62,13 +94,21 @@ SmallBarcodeReader_INCLUDE_DIRS = \
 	$(ZINT_INCLUDE)
 
 # Conditionally add ZBar include and define HAVE_ZBAR only if ZBar backend is being compiled
-# HAVE_ZBAR should only be defined when BarcodeDecoderZBar.m is actually in the build
 ifneq ($(ZBAR_INCLUDE),)
-  SmallBarcodeReader_INCLUDE_DIRS += $(ZBAR_INCLUDE)
-  # Only define HAVE_ZBAR if we're actually compiling the ZBar backend
-  # (This is checked by seeing if BarcodeDecoderZBar.m is in OBJC_FILES)
-  # For now, we're not compiling ZBar, so don't define HAVE_ZBAR
-  # SmallBarcodeReader_OBJCFLAGS += -DHAVE_ZBAR=1
+  ifneq ($(ZBAR_LIBS),)
+    SmallBarcodeReader_INCLUDE_DIRS += $(ZBAR_INCLUDE)
+    # Define HAVE_ZBAR when both headers and library are available
+    SmallBarcodeReader_OBJCFLAGS += -DHAVE_ZBAR=1
+  endif
+endif
+
+# Conditionally add ZInt include and define HAVE_ZINT only if ZInt backend is being compiled
+ifneq ($(ZINT_INCLUDE),)
+  ifneq ($(ZINT_LIBS),)
+    SmallBarcodeReader_INCLUDE_DIRS += $(ZINT_INCLUDE)
+    # Define HAVE_ZINT when both headers and library are available
+    SmallBarcodeReader_OBJCFLAGS += -DHAVE_ZINT=1
+  endif
 endif
 
 # Find SmallStep framework/library
@@ -87,38 +127,24 @@ else
   SMALLSTEP_LDFLAGS :=
 endif
 
-# Get ZBar library flags from pkg-config if available (optional, not required)
-ZBAR_PKG_LIBS := $(shell pkg-config --libs zbar 2>/dev/null)
-ifeq ($(ZBAR_PKG_LIBS),)
-  # Default to -lzbar (library is in standard paths, no -L needed)
-  # But don't add it if headers aren't found
-  ifneq ($(ZBAR_INCLUDE),)
-    ZBAR_LIBS := -lzbar
-  else
-    ZBAR_LIBS :=
-  endif
-  ZBAR_LIB_PATH :=
-else
-  # Use pkg-config output (usually just -lzbar, library is in standard paths)
-  ZBAR_LIBS := $(ZBAR_PKG_LIBS)
-  # Extract library path if pkg-config provides it
-  ZBAR_LIB_PATH := $(shell echo "$(ZBAR_PKG_LIBS)" | grep -o '\-L[^ ]*' || echo "")
-endif
-
-# Get ZInt library (prioritize ZInt for this build)
-ZINT_LIBS :=
-ifneq ($(ZINT_INCLUDE),)
-  # ZInt is available, use it for linking
-  ZINT_LIBS := -lzint
-endif
+# ZBar and ZInt library variables are already set above during header detection
+# Extract library paths if pkg-config provided them (already done above, but keep for clarity)
+ZBAR_LIB_PATH := $(shell echo "$(ZBAR_LIBS)" | grep -o '\-L[^ ]*' || echo "")
+ZINT_LIB_PATH := $(shell echo "$(ZINT_LIBS)" | grep -o '\-L[^ ]*' || echo "")
 
 # Detect available libraries (library names only, no -L flags)
 # Note: These go into LIBRARIES_DEPEND_UPON for dependency tracking
+# ZInt and ZBar are optional - app should build without them
 LIBRARIES := -lobjc -lgnustep-gui -lgnustep-base
 
-# Add ZInt if available
-ifneq ($(ZINT_INCLUDE),)
-  LIBRARIES += -lzint
+# Add ZInt if available (optional - only if library was found)
+ifneq ($(ZINT_LIBS),)
+  LIBRARIES += $(ZINT_LIBS)
+endif
+
+# Add ZBar if available (optional - only if library was found)
+ifneq ($(ZBAR_LIBS),)
+  LIBRARIES += $(ZBAR_LIBS)
 endif
 
 # Set library dependencies (library names)
@@ -140,9 +166,15 @@ SmallBarcodeReader_ADDITIONAL_LDFLAGS = $(SMALLSTEP_LIB_PATH) $(SMALLSTEP_LDFLAG
 
 # Add to tool libraries (this is part of ALL_LIBS for applications)
 # Use TOOL_LIBS (not ADDITIONAL_TOOL_LIBS) as per GNUstep rules
-# Prioritize ZInt, then SmallStep
-# Note: ZInt is an encoding library, but we link it to test the build
-# ZBar is excluded from linking for now (as requested)
-SmallBarcodeReader_TOOL_LIBS = $(ZINT_LIBS) -lSmallStep
+# ZInt and ZBar are optional - only link if available
+# SmallStep is required
+TOOL_LIBS_LIST = -lSmallStep
+ifneq ($(ZINT_LIBS),)
+  TOOL_LIBS_LIST += $(ZINT_LIBS)
+endif
+ifneq ($(ZBAR_LIBS),)
+  TOOL_LIBS_LIST += $(ZBAR_LIBS)
+endif
+SmallBarcodeReader_TOOL_LIBS = $(TOOL_LIBS_LIST)
 
 include $(GNUSTEP_MAKEFILES)/application.make

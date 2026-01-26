@@ -7,16 +7,22 @@
 
 #import "BarcodeDecoder.h"
 #import "BarcodeDecoderBackend.h"
-#import "BarcodeDecoderZInt.h"
 #import <string.h>
 
 // Conditionally import ZBar if available
-// Only include if HAVE_ZBAR is defined (which means ZBar backend is being compiled)
 #if defined(HAVE_ZBAR)
 #import "BarcodeDecoderZBar.h"
 #define ZBAR_BACKEND_AVAILABLE 1
 #else
 #define ZBAR_BACKEND_AVAILABLE 0
+#endif
+
+// Conditionally import ZInt if available
+#if defined(HAVE_ZINT)
+#import "BarcodeDecoderZInt.h"
+#define ZINT_BACKEND_AVAILABLE 1
+#else
+#define ZINT_BACKEND_AVAILABLE 0
 #endif
 
 @implementation BarcodeResult
@@ -46,16 +52,20 @@
     }
 #endif
     
-    // Check ZInt (currently returns NO as it doesn't support decoding)
+    // Check ZInt (if compiled in)
+#if ZINT_BACKEND_AVAILABLE
     if ([BarcodeDecoderZInt isAvailable]) {
         [backends addObject:[BarcodeDecoderZInt backendName]];
     }
+#endif
     
     return backends;
 }
 
 - (instancetype)init {
     // Auto-detect and use first available backend
+    // If no backend is available, still initialize (backend will be nil)
+    // This allows the app to run and show a graceful error message
     id backend = nil;
     
     // Try ZBar first (primary decoding library) if compiled in
@@ -65,16 +75,15 @@
     }
     else
 #endif
-    // Try ZInt (currently not available for decoding)
+    // Try ZInt (if compiled in)
+#if ZINT_BACKEND_AVAILABLE
     if ([BarcodeDecoderZInt isAvailable]) {
         backend = [[BarcodeDecoderZInt alloc] init];
     }
+#endif
     
-    if (!backend) {
-        [self release];
-        return nil;
-    }
-    
+    // Initialize even if no backend is available
+    // The app will show a graceful error message when decoding is attempted
     return [self initWithBackend:backend];
 }
 
@@ -95,10 +104,19 @@
     if (_backend && [_backend respondsToSelector:@selector(backendName)]) {
         return [_backend performSelector:@selector(backendName)];
     }
-    return @"Unknown";
+    return @"None";
+}
+
+- (BOOL)hasBackend {
+    return (_backend != nil);
 }
 
 - (NSArray *)decodeBarcodesFromImage:(NSImage *)image {
+    // Check if backend is available
+    if (!_backend) {
+        return nil; // No backend available - caller should show error message
+    }
+    
     if (!image) {
         return nil;
     }

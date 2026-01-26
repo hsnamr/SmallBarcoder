@@ -80,7 +80,23 @@
     self.textView = [[NSTextView alloc] initWithFrame:textViewRect];
     [self.textView setEditable:NO];
     [self.textView setFont:[NSFont systemFontOfSize:12]];
-    [self.textView setString:@"No image loaded.\n\nClick 'Open Image' to load a JPEG or PNG image containing barcodes."];
+    // Check if any backends are available and show appropriate message
+    NSArray *availableBackends = [BarcodeDecoder availableBackends];
+    if (availableBackends.count == 0) {
+        NSMutableString *msg = [NSMutableString string];
+        [msg appendString:@"No barcode decoder libraries available.\n\n"];
+        [msg appendString:@"This application requires a barcode decoding library to function:\n"];
+        [msg appendString:@"- ZBar (libzbar) for barcode decoding\n"];
+        [msg appendString:@"- ZInt (libzint) for barcode encoding (decoding not yet supported)\n\n"];
+        [msg appendString:@"Please install one of these libraries:\n"];
+        [msg appendString:@"- Linux: sudo apt-get install libzbar-dev\n"];
+        [msg appendString:@"- macOS: brew install zbar\n\n"];
+        [msg appendString:@"Note: Dynamic library loading will be available in a future version.\n\n"];
+        [msg appendString:@"Click 'Open Image' to load an image (decoding will show an error message)."];
+        [self.textView setString:msg];
+    } else {
+        [self.textView setString:@"No image loaded.\n\nClick 'Open Image' to load a JPEG or PNG image containing barcodes."];
+    }
     
     [self.textScrollView setDocumentView:self.textView];
     [contentView addSubview:self.textScrollView];
@@ -138,11 +154,8 @@
         [self.decodeButton setEnabled:YES];
         [self.textView setString:[NSString stringWithFormat:@"Image loaded: %@\n\nClick 'Decode' to scan for barcodes.", [url lastPathComponent]]];
     } else {
-        NSAlert *alert = [[NSAlert alloc] init];
-        [alert setMessageText:@"Error Loading Image"];
-        [alert setInformativeText:[NSString stringWithFormat:@"Could not load image from: %@", url]];
-        [alert setAlertStyle:NSWarningAlertStyle];
-        [alert runModal];
+        // Show error in text view instead of popup
+        [self.textView setString:[NSString stringWithFormat:@"Error: Could not load image from:\n%@\n\nPlease ensure the file exists and is a valid image format (JPEG, PNG, TIFF).", url]];
     }
 }
 
@@ -166,6 +179,21 @@
 }
 
 - (void)updateResults:(NSArray *)results {
+    // Check if decoder has a backend
+    if (!self.decoder || ![self.decoder hasBackend]) {
+        NSMutableString *errorMsg = [NSMutableString string];
+        [errorMsg appendString:@"No barcode decoder available.\n\n"];
+        [errorMsg appendString:@"This application requires a barcode decoding library to function:\n"];
+        [errorMsg appendString:@"- ZBar (libzbar) for barcode decoding\n"];
+        [errorMsg appendString:@"- ZInt (libzint) for barcode encoding (decoding not yet supported)\n\n"];
+        [errorMsg appendString:@"Please install one of these libraries:\n"];
+        [errorMsg appendString:@"- Linux: sudo apt-get install libzbar-dev\n"];
+        [errorMsg appendString:@"- macOS: brew install zbar\n\n"];
+        [errorMsg appendString:@"Note: Dynamic library loading will be available in a future version."];
+        [self.textView setString:errorMsg];
+        return;
+    }
+    
     if (results && results.count > 0) {
         NSMutableString *output = [NSMutableString string];
         [output appendString:@"Barcode Decoding Results:\n"];

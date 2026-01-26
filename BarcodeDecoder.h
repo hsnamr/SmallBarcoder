@@ -41,6 +41,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Get current backend name
 - (NSString *)backendName;
 
+/// Check if a backend is available
+- (BOOL)hasBackend;
+
 /// Decode barcodes from an NSImage
 /// @param image The image to decode
 /// @return Array of BarcodeResult objects, or nil on error
