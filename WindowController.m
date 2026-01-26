@@ -218,6 +218,8 @@
         self.currentImage = image;
         [self.imageView setImage:image];
         [self.decodeButton setEnabled:YES];
+        // Clear original encoded data when loading external image
+        self.originalEncodedData = nil;
         [self.textView setString:[NSString stringWithFormat:@"Image loaded: %@\n\nClick 'Decode' to scan for barcodes.", [url lastPathComponent]]];
     } else {
         // Show error in text view instead of popup
@@ -238,10 +240,42 @@
 
 - (void)decodeInBackground:(id)object {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    NSArray *results = [self.decoder decodeBarcodesFromImage:self.currentImage];
+    // Pass original encoded data if available for matching
+    NSArray *results = [self.decoder decodeBarcodesFromImage:self.currentImage originalInput:self.originalEncodedData];
     
     [SSConcurrency performSelectorOnMainThread:@selector(updateResults:) onTarget:self withObject:results waitUntilDone:YES];
     [pool release];
+}
+
+- (NSString *)matchStatusForResult:(BarcodeResult *)result {
+    if (!result.originalInput) {
+        return @"N/A"; // No original input to compare
+    }
+    
+    if ([result.data isEqualToString:result.originalInput]) {
+        return @"[MATCH] ✓"; // Green indicator
+    } else {
+        // Check for partial match (similar strings)
+        if ([result.data length] > 0 && [result.originalInput length] > 0) {
+            // Simple similarity check - if decoded data contains original or vice versa
+            NSRange range = [result.data rangeOfString:result.originalInput];
+            if (range.location != NSNotFound) {
+                return @"[PARTIAL] ~"; // Yellow indicator
+            }
+            range = [result.originalInput rangeOfString:result.data];
+            if (range.location != NSNotFound) {
+                return @"[PARTIAL] ~"; // Yellow indicator
+            }
+        }
+        return @"[MISMATCH] ✗"; // Red indicator
+    }
+}
+
+- (NSString *)qualityScoreString:(NSInteger)quality {
+    if (quality < 0) {
+        return @"N/A";
+    }
+    return [NSString stringWithFormat:@"%ld/100", (long)quality];
 }
 
 - (void)updateResults:(NSArray *)results {
@@ -271,13 +305,77 @@
             [output appendFormat:@"Barcode #%ld:\n", (long)(i + 1)];
             [output appendFormat:@"  Type: %@\n", result.type];
             [output appendFormat:@"  Data: %@\n", result.data];
+            
+            // Display quality score
+            if (result.quality >= 0) {
+                [output appendFormat:@"  Quality: %@\n", [self qualityScoreString:result.quality]];
+            } else {
+                [output appendString:@"  Quality: N/A\n"];
+            }
+            
+            // Display match status if original input is available
+            if (result.originalInput) {
+                [output appendFormat:@"  Original Input: %@\n", result.originalInput];
+                NSString *matchStatus = [self matchStatusForResult:result];
+                [output appendFormat:@"  Match Status: %@\n", matchStatus];
+            }
+            
             [output appendFormat:@"  Location Points: %lu\n", (unsigned long)result.points.count];
             [output appendString:@"\n"];
         }
         
+        // Add summary if original input was provided
+        if (self.originalEncodedData) {
+            [output appendString:@"\n--- Summary ---\n"];
+            NSInteger matchCount = 0;
+            NSInteger mismatchCount = 0;
+            NSInteger partialCount = 0;
+            NSInteger totalQuality = 0;
+            NSInteger qualityCount = 0;
+            
+            for (i = 0; i < results.count; i++) {
+                BarcodeResult *result = [results objectAtIndex:i];
+                NSString *matchStatus = [self matchStatusForResult:result];
+                if ([matchStatus rangeOfString:@"[MATCH]"].location != NSNotFound) {
+                    matchCount++;
+                } else if ([matchStatus rangeOfString:@"[MISMATCH]"].location != NSNotFound) {
+                    mismatchCount++;
+                } else if ([matchStatus rangeOfString:@"[PARTIAL]"].location != NSNotFound) {
+                    partialCount++;
+                }
+                
+                if (result.quality >= 0) {
+                    totalQuality += result.quality;
+                    qualityCount++;
+                }
+            }
+            
+            [output appendFormat:@"Matches: %ld\n", (long)matchCount];
+            [output appendFormat:@"Mismatches: %ld\n", (long)mismatchCount];
+            if (partialCount > 0) {
+                [output appendFormat:@"Partial: %ld\n", (long)partialCount];
+            }
+            
+            if (qualityCount > 0) {
+                NSInteger avgQuality = totalQuality / qualityCount;
+                [output appendFormat:@"Average Quality: %ld/100\n", (long)avgQuality];
+            }
+        }
+        
         [self.textView setString:output];
     } else {
-        [self.textView setString:@"No barcodes found in the image.\n\nPlease try:\n- Ensuring the image is clear and in focus\n- Using a higher resolution image\n- Checking that the barcode is not damaged or obscured"];
+        NSMutableString *msg = [NSMutableString string];
+        [msg appendString:@"No barcodes found in the image.\n\n"];
+        [msg appendString:@"Please try:\n"];
+        [msg appendString:@"- Ensuring the image is clear and in focus\n"];
+        [msg appendString:@"- Using a higher resolution image\n"];
+        [msg appendString:@"- Checking that the barcode is not damaged or obscured\n"];
+        if (self.originalEncodedData) {
+            [msg appendString:@"\nNote: The barcode was encoded from: "];
+            [msg appendString:self.originalEncodedData];
+            [msg appendString:@"\nIf decoding failed, the distortion may be too high."];
+        }
+        [self.textView setString:msg];
     }
 }
 

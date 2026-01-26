@@ -15,11 +15,15 @@ NS_ASSUME_NONNULL_BEGIN
     NSString *data;
     NSString *type;
     NSArray *points; // NSArray of NSValue (NSRect values)
+    NSInteger quality; // Quality score (0-100, or -1 if not available)
+    NSString *originalInput; // Original input data if this was encoded (for matching)
 }
 
 @property (retain, nonatomic) NSString *data;
 @property (retain, nonatomic) NSString *type;
 @property (retain, nonatomic) NSArray *points; // NSArray of NSValue (NSRect values)
+@property (assign, nonatomic) NSInteger quality; // Quality score (0-100, or -1 if not available)
+@property (retain, nonatomic) NSString *originalInput; // Original input data if this was encoded (for matching)
 
 @end
 
@@ -48,6 +52,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// @param image The image to decode
 /// @return Array of BarcodeResult objects, or nil on error
 - (NSArray *)decodeBarcodesFromImage:(NSImage *)image;
+
+/// Decode barcodes from an NSImage with original input for matching
+/// @param image The image to decode
+/// @param originalInput Original input data (if this image was encoded, for matching)
+/// @return Array of BarcodeResult objects, or nil on error
+- (NSArray *)decodeBarcodesFromImage:(NSImage *)image originalInput:(NSString *)originalInput;
 
 /// Decode barcodes from image data
 /// @param imageData The image data (JPEG, PNG, etc.)

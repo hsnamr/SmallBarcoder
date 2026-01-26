@@ -85,6 +85,21 @@
             const char *typeName = zbar_get_symbol_name(typ);
             result.type = typeName ? [NSString stringWithUTF8String:typeName] : @"Unknown";
             
+            // Get quality score (ZBar quality is typically 0-100, but can vary)
+            // zbar_symbol_get_quality returns an integer quality metric
+            int zbarQuality = zbar_symbol_get_quality(symbol);
+            // ZBar quality can be negative or very high, normalize to 0-100 range
+            if (zbarQuality >= 0) {
+                // Clamp to 0-100 range (ZBar may return values outside this)
+                if (zbarQuality > 100) {
+                    result.quality = 100;
+                } else {
+                    result.quality = zbarQuality;
+                }
+            } else {
+                result.quality = -1; // Quality not available
+            }
+            
             // Get symbol location points
             NSMutableArray *points = [NSMutableArray array];
             int pointCount = zbar_symbol_get_loc_size(symbol);

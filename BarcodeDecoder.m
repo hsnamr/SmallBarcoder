@@ -30,11 +30,23 @@
 @synthesize data;
 @synthesize type;
 @synthesize points;
+@synthesize quality;
+@synthesize originalInput;
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        quality = -1; // -1 means quality not available
+        originalInput = nil;
+    }
+    return self;
+}
 
 - (void)dealloc {
     [data release];
     [type release];
     [points release];
+    [originalInput release];
     [super dealloc];
 }
 
@@ -112,6 +124,10 @@
 }
 
 - (NSArray *)decodeBarcodesFromImage:(NSImage *)image {
+    return [self decodeBarcodesFromImage:image originalInput:nil];
+}
+
+- (NSArray *)decodeBarcodesFromImage:(NSImage *)image originalInput:(NSString *)originalInput {
     // Check if backend is available
     if (!_backend) {
         return nil; // No backend available - caller should show error message
@@ -189,6 +205,16 @@
     // Use backend to decode (backend will handle memory management)
     if (_backend && [_backend respondsToSelector:@selector(decodeBarcodesFromData:width:height:)]) {
         NSArray *results = [_backend decodeBarcodesFromData:rawData width:(unsigned)width height:(unsigned)height];
+        
+        // Set original input for matching if provided
+        if (originalInput && results) {
+            NSInteger i;
+            for (i = 0; i < results.count; i++) {
+                BarcodeResult *result = [results objectAtIndex:i];
+                result.originalInput = originalInput;
+            }
+        }
+        
         // Backend should handle freeing the data, but if it doesn't, we need to free it
         // For now, we'll free it here since the backend might copy the data
         free(rawData);
