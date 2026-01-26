@@ -8,6 +8,8 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 
+@protocol BarcodeEncoderBackend;
+
 NS_ASSUME_NONNULL_BEGIN
 
 /// Encoding options keys
@@ -22,6 +24,7 @@ extern NSString * const BarcodeEncoderOptionBackgroundColor;
 /// Generic barcode encoder supporting multiple backends
 @interface BarcodeEncoder : NSObject {
     id _backend; // id<BarcodeEncoderBackend>
+    NSMutableArray *_dynamicBackends; // Array of dynamically loaded backends
 }
 
 /// Initialize with auto-detected backend
@@ -56,6 +59,12 @@ extern NSString * const BarcodeEncoderOptionBackgroundColor;
 /// Get list of supported symbologies from current backend
 /// @return Array of dictionaries with keys: "id" (int), "name" (NSString), "description" (NSString)
 - (NSArray *)supportedSymbologies;
+
+/// Register a dynamically loaded backend
+- (void)registerDynamicBackend:(id<BarcodeEncoderBackend>)backend;
+
+/// Get all registered backends (static + dynamic)
+- (NSArray *)allBackends;
 
 @end
 

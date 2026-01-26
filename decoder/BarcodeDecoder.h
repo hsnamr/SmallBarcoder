@@ -13,6 +13,8 @@
 #import <AppKit/AppKit.h>
 #endif
 
+@protocol BarcodeDecoderBackend;
+
 NS_ASSUME_NONNULL_BEGIN
 
 /// Barcode decoding result
@@ -35,6 +37,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Generic barcode decoder supporting multiple backends
 @interface BarcodeDecoder : NSObject {
     id _backend; // id<BarcodeDecoderBackend>
+    NSMutableArray *_dynamicBackends; // Array of dynamically loaded backends
 }
 
 /// Initialize with auto-detected backend
@@ -68,6 +71,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// @param imageData The image data (JPEG, PNG, etc.)
 /// @return Array of BarcodeResult objects, or nil on error
 - (NSArray *)decodeBarcodesFromImageData:(NSData *)imageData;
+
+/// Register a dynamically loaded backend
+- (void)registerDynamicBackend:(id<BarcodeDecoderBackend>)backend;
+
+/// Get all registered backends (static + dynamic)
+- (NSArray *)allBackends;
 
 @end
 

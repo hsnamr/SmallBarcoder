@@ -10,6 +10,7 @@
 #import "BarcodeEncoder.h"
 #import "ImageDistorter.h"
 #import "DynamicLibraryLoader.h"
+#import "BackendFactory.h"
 #import "BarcodeTester.h"
 #import "BarcodeTestResult.h"
 #import "../SmallStep/SmallStep/Core/SmallStep.h"
@@ -960,15 +961,36 @@
     // Update status
     [self updateLibraryStatus];
     
-    // Try to refresh backends (this would require backend system updates)
-    // For now, just show success message
+    // Try to detect and register backends from the loaded library
+    NSDictionary *backends = [BackendFactory scanLibraryForBackends:library];
     NSMutableString *msg = [NSMutableString string];
     [msg appendString:@"Library Loaded Successfully\n"];
     [msg appendString:@"==========================\n\n"];
     [msg appendFormat:@"Path: %@\n", [url path]];
     [msg appendFormat:@"Total libraries loaded: %ld\n\n", (long)self.loadedLibraries.count];
-    [msg appendString:@"Note: Backend system integration for dynamic loading is in progress.\n"];
-    [msg appendString:@"Static backends are still available."];
+    
+    // Check if backends were found
+    id decoderBackend = [backends objectForKey:@"decoder"];
+    id encoderBackend = [backends objectForKey:@"encoder"];
+    
+    if (decoderBackend) {
+        [self.decoder registerDynamicBackend:decoderBackend];
+        [msg appendFormat:@"✓ Decoder backend registered: %@\n", [decoderBackend backendName]];
+    }
+    
+    if (encoderBackend) {
+        [self.encoder registerDynamicBackend:encoderBackend];
+        [msg appendFormat:@"✓ Encoder backend registered: %@\n", [encoderBackend backendName]];
+    }
+    
+    if (!decoderBackend && !encoderBackend) {
+        [msg appendString:@"\nNote: No backends detected in this library.\n"];
+        [msg appendString:@"The library may not contain ZBar or ZInt symbols,\n"];
+        [msg appendString:@"or dynamic backend loading is not yet fully implemented.\n"];
+        [msg appendString:@"Static backends are still available."];
+    } else {
+        [msg appendString:@"\nBackends are now available for use."];
+    }
     
     [self.textView setString:msg];
 }

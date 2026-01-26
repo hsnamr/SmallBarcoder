@@ -55,6 +55,7 @@ SmallBarcodeReader_OBJC_FILES = \
 	image/ImageMatrix.m \
 	image/ImageDistorter.m \
 	core/DynamicLibraryLoader.m \
+	core/BackendFactory.m \
 	tester/BarcodeTestResult.m \
 	tester/BarcodeTester.m \
 	ui/WindowController.m
@@ -84,6 +85,7 @@ SmallBarcodeReader_HEADER_FILES = \
 	image/ImageMatrix.h \
 	image/ImageDistorter.h \
 	core/DynamicLibraryLoader.h \
+	core/BackendFactory.h \
 	tester/BarcodeTestResult.h \
 	tester/BarcodeTester.h \
 	ui/WindowController.h

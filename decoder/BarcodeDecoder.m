@@ -108,13 +108,38 @@
     self = [super init];
     if (self) {
         _backend = [backend retain];
+        _dynamicBackends = [[NSMutableArray alloc] init];
     }
     return self;
 }
 
 - (void)dealloc {
     [_backend release];
+    [_dynamicBackends release];
     [super dealloc];
+}
+
+- (void)registerDynamicBackend:(id<BarcodeDecoderBackend>)backend {
+    if (backend && ![_dynamicBackends containsObject:backend]) {
+        [_dynamicBackends addObject:backend];
+        
+        // If no static backend is set, use the first dynamic one
+        if (!_backend && _dynamicBackends.count > 0) {
+            _backend = [[_dynamicBackends objectAtIndex:0] retain];
+        }
+    }
+}
+
+- (NSArray *)allBackends {
+    NSMutableArray *all = [NSMutableArray array];
+    
+    if (_backend) {
+        [all addObject:_backend];
+    }
+    
+    [all addObjectsFromArray:_dynamicBackends];
+    
+    return all;
 }
 
 - (NSString *)backendName {
