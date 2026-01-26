@@ -14,6 +14,8 @@
 @class BarcodeDecoder;
 @class BarcodeEncoder;
 @class ImageDistorter;
+@class BarcodeTester;
+@class BarcodeTestSession;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -36,10 +38,17 @@ NS_ASSUME_NONNULL_BEGIN
     NSButton *clearDistortionButton;
     NSButton *previewDistortionButton;
     NSButton *loadLibraryButton;
+    NSButton *testDecodabilityButton;
+    NSButton *runProgressiveTestButton;
+    NSButton *exportTestResultsButton;
+    NSSlider *progressiveTestSlider;
+    NSTextField *progressiveTestLabel;
     NSMutableArray *loadedLibraries; // Array of DynamicLibrary objects
     BarcodeDecoder *decoder;
     BarcodeEncoder *encoder;
     ImageDistorter *distorter;
+    BarcodeTester *tester;
+    BarcodeTestSession *currentTestSession;
     NSImage *currentImage;
     NSImage *originalImage; // Original image before distortions
     NSString *originalEncodedData; // Track original input for matching
@@ -63,10 +72,17 @@ NS_ASSUME_NONNULL_BEGIN
 @property (retain, nonatomic) NSButton *clearDistortionButton;
 @property (retain, nonatomic) NSButton *previewDistortionButton;
 @property (retain, nonatomic) NSButton *loadLibraryButton;
+@property (retain, nonatomic) NSButton *testDecodabilityButton;
+@property (retain, nonatomic) NSButton *runProgressiveTestButton;
+@property (retain, nonatomic) NSButton *exportTestResultsButton;
+@property (retain, nonatomic) NSSlider *progressiveTestSlider;
+@property (retain, nonatomic) NSTextField *progressiveTestLabel;
 @property (retain, nonatomic) NSMutableArray *loadedLibraries;
 @property (retain, nonatomic) BarcodeDecoder *decoder;
 @property (retain, nonatomic) BarcodeEncoder *encoder;
 @property (retain, nonatomic) ImageDistorter *distorter;
+@property (retain, nonatomic) BarcodeTester *tester;
+@property (retain, nonatomic) BarcodeTestSession *currentTestSession;
 @property (retain, nonatomic) NSImage *currentImage;
 @property (retain, nonatomic) NSImage *originalImage;
 @property (retain, nonatomic) NSString *originalEncodedData;

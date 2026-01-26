@@ -10,6 +10,8 @@
 #import "BarcodeEncoder.h"
 #import "ImageDistorter.h"
 #import "DynamicLibraryLoader.h"
+#import "BarcodeTester.h"
+#import "BarcodeTestResult.h"
 #import "../SmallStep/SmallStep/Core/SmallStep.h"
 
 @interface WindowController (Private)
@@ -49,10 +51,17 @@
 @synthesize clearDistortionButton;
 @synthesize previewDistortionButton;
 @synthesize loadLibraryButton;
+@synthesize testDecodabilityButton;
+@synthesize runProgressiveTestButton;
+@synthesize exportTestResultsButton;
+@synthesize progressiveTestSlider;
+@synthesize progressiveTestLabel;
 @synthesize loadedLibraries;
 @synthesize decoder;
 @synthesize encoder;
 @synthesize distorter;
+@synthesize tester;
+@synthesize currentTestSession;
 @synthesize currentImage;
 @synthesize originalImage;
 @synthesize originalEncodedData;
@@ -90,7 +99,14 @@
     [decoder release];
     [encoder release];
     [distorter release];
+    [tester release];
+    [currentTestSession release];
     [loadLibraryButton release];
+    [testDecodabilityButton release];
+    [runProgressiveTestButton release];
+    [exportTestResultsButton release];
+    [progressiveTestSlider release];
+    [progressiveTestLabel release];
     [loadedLibraries release];
     [currentImage release];
     [originalImage release];
@@ -308,6 +324,60 @@
     [self.loadLibraryButton setAction:@selector(loadLibrary:)];
     [contentView addSubview:self.loadLibraryButton];
 #endif
+    
+    // Testing controls section
+    // Test Decodability button
+    NSRect testDecodabilityRect = NSMakeRect(280, 220, 140, 32);
+    self.testDecodabilityButton = [[NSButton alloc] initWithFrame:testDecodabilityRect];
+    [self.testDecodabilityButton setTitle:@"Test Decodability"];
+    [self.testDecodabilityButton setButtonType:NSMomentaryPushInButton];
+    [self.testDecodabilityButton setBezelStyle:NSRoundedBezelStyle];
+    [self.testDecodabilityButton setTarget:self];
+    [self.testDecodabilityButton setAction:@selector(testDecodability:)];
+    [self.testDecodabilityButton setEnabled:NO];
+    [contentView addSubview:self.testDecodabilityButton];
+    
+    // Progressive test slider
+    NSRect progressiveSliderRect = NSMakeRect(280, 190, 200, 20);
+    self.progressiveTestSlider = [[NSSlider alloc] initWithFrame:progressiveSliderRect];
+    [self.progressiveTestSlider setMinValue:0.0];
+    [self.progressiveTestSlider setMaxValue:1.0];
+    [self.progressiveTestSlider setDoubleValue:0.0];
+    [self.progressiveTestSlider setTarget:self];
+    [self.progressiveTestSlider setAction:@selector(progressiveTestSliderChanged:)];
+    [self.progressiveTestSlider setEnabled:NO];
+    [contentView addSubview:self.progressiveTestSlider];
+    
+    // Progressive test label
+    NSRect progressiveLabelRect = NSMakeRect(490, 190, 100, 20);
+    self.progressiveTestLabel = [[NSTextField alloc] initWithFrame:progressiveLabelRect];
+    [self.progressiveTestLabel setEditable:NO];
+    [self.progressiveTestLabel setBordered:NO];
+    [self.progressiveTestLabel setBackgroundColor:[NSColor controlBackgroundColor]];
+    [self.progressiveTestLabel setStringValue:@"Intensity: 0.00"];
+    [contentView addSubview:self.progressiveTestLabel];
+    
+    // Run Progressive Test button
+    NSRect runProgressiveRect = NSMakeRect(280, 160, 140, 32);
+    self.runProgressiveTestButton = [[NSButton alloc] initWithFrame:runProgressiveRect];
+    [self.runProgressiveTestButton setTitle:@"Run Progressive Test"];
+    [self.runProgressiveTestButton setButtonType:NSMomentaryPushInButton];
+    [self.runProgressiveTestButton setBezelStyle:NSRoundedBezelStyle];
+    [self.runProgressiveTestButton setTarget:self];
+    [self.runProgressiveTestButton setAction:@selector(runProgressiveTest:)];
+    [self.runProgressiveTestButton setEnabled:NO];
+    [contentView addSubview:self.runProgressiveTestButton];
+    
+    // Export Test Results button
+    NSRect exportResultsRect = NSMakeRect(430, 160, 140, 32);
+    self.exportTestResultsButton = [[NSButton alloc] initWithFrame:exportResultsRect];
+    [self.exportTestResultsButton setTitle:@"Export Results..."];
+    [self.exportTestResultsButton setButtonType:NSMomentaryPushInButton];
+    [self.exportTestResultsButton setBezelStyle:NSRoundedBezelStyle];
+    [self.exportTestResultsButton setTarget:self];
+    [self.exportTestResultsButton setAction:@selector(exportTestResults:)];
+    [self.exportTestResultsButton setEnabled:NO];
+    [contentView addSubview:self.exportTestResultsButton];
     
     [self updateDistortionLabels];
 }
@@ -631,6 +701,9 @@
     [self.saveButton setEnabled:YES];
     [self.applyDistortionButton setEnabled:YES];
     [self.previewDistortionButton setEnabled:YES];
+    [self.testDecodabilityButton setEnabled:YES];
+    [self.runProgressiveTestButton setEnabled:YES];
+    [self.progressiveTestSlider setEnabled:YES];
     
     // Clear any previous distortions
     [self.distorter clearDistortions];
@@ -645,6 +718,8 @@
     [output appendString:@"The barcode image is displayed on the left.\n"];
     [output appendString:@"You can:\n"];
     [output appendString:@"- Apply distortions to test decodability limits\n"];
+    [output appendString:@"- Use 'Test Decodability' for single test\n"];
+    [output appendString:@"- Use 'Run Progressive Test' for systematic testing\n"];
     [output appendString:@"- Click 'Decode' to verify it can be read\n"];
     [output appendString:@"- Click 'Save Image...' to save it to a file"];
     
@@ -903,6 +978,309 @@
     // This could be enhanced to show library list in a separate view
     if (self.loadedLibraries.count > 0) {
         // Libraries are loaded
+    }
+}
+
+- (void)testDecodability:(id)sender {
+    if (![self.encoder hasBackend] || ![self.decoder hasBackend]) {
+        [self.textView setString:@"Both encoder and decoder are required for testing.\n\nPlease ensure ZInt and ZBar libraries are available."];
+        return;
+    }
+    
+    NSString *testData = [self.encodeTextField stringValue];
+    if (!testData || testData.length == 0) {
+        [self.textView setString:@"Please enter test data in the encoding field first."];
+        return;
+    }
+    
+    NSInteger selectedIndex = [self.symbologyPopup indexOfSelectedItem];
+    if (selectedIndex < 0) {
+        [self.textView setString:@"Please select a barcode type."];
+        return;
+    }
+    
+    int symbology = [[self.symbologyPopup selectedItem] tag];
+    NSInteger distIndex = [self.distortionTypePopup indexOfSelectedItem];
+    if (distIndex < 0) {
+        [self.textView setString:@"Please select a distortion type."];
+        return;
+    }
+    
+    DistortionType distType = (DistortionType)[[self.distortionTypePopup selectedItem] tag];
+    float intensity = [self.distortionIntensitySlider floatValue];
+    float strength = [self.distortionStrengthSlider floatValue];
+    
+    [self.textView setString:@"Running decodability test...\n"];
+    
+    // Run test in background
+    NSDictionary *testParams = [NSDictionary dictionaryWithObjectsAndKeys:
+        testData, @"data",
+        [NSNumber numberWithInt:symbology], @"symbology",
+        [NSNumber numberWithInt:distType], @"distortionType",
+        [NSNumber numberWithFloat:intensity], @"intensity",
+        [NSNumber numberWithFloat:strength], @"strength",
+        nil];
+    
+    [SSConcurrency performSelectorInBackground:@selector(runTestInBackground:) onTarget:self withObject:testParams];
+}
+
+- (void)runTestInBackground:(id)object {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    NSDictionary *params = (NSDictionary *)object;
+    NSString *testData = [params objectForKey:@"data"];
+    int symbology = [[params objectForKey:@"symbology"] intValue];
+    NSInteger distType = [[params objectForKey:@"distortionType"] intValue];
+    float intensity = [[params objectForKey:@"intensity"] floatValue];
+    float strength = [[params objectForKey:@"strength"] floatValue];
+    
+    BarcodeTestResult *result = [self.tester runTestWithData:testData
+                                                    symbology:symbology
+                                                distortionType:distType
+                                                     intensity:intensity
+                                                       strength:strength];
+    
+    [SSConcurrency performSelectorOnMainThread:@selector(updateTestResult:) onTarget:self withObject:result waitUntilDone:YES];
+    [pool release];
+}
+
+- (void)updateTestResult:(BarcodeTestResult *)result {
+    if (!result) {
+        [self.textView setString:@"Test failed: Could not encode or decode barcode."];
+        return;
+    }
+    
+    NSMutableString *output = [NSMutableString string];
+    [output appendString:@"Decodability Test Result\n"];
+    [output appendString:@"========================\n\n"];
+    [output appendFormat:@"Barcode Type: %@\n", result.barcodeType];
+    [output appendFormat:@"Test Data: %@\n", result.testData];
+    [output appendFormat:@"Distortion: %@ (Intensity: %.2f, Strength: %.2f)\n", 
+        [ImageDistorter nameForDistortionType:(DistortionType)result.distortionType],
+        result.distortionIntensity,
+        result.distortionStrength];
+    [output appendString:@"\n"];
+    [output appendFormat:@"Decode Success: %@\n", result.decodeSuccess ? @"YES" : @"NO"];
+    
+    if (result.decodeSuccess) {
+        [output appendFormat:@"Quality Score: %ld/100\n", (long)result.qualityScore];
+        [output appendFormat:@"Decoded Data: %@\n", result.decodedData];
+        [output appendFormat:@"Data Matches: %@\n", result.dataMatches ? @"YES ✓" : @"NO ✗"];
+    } else {
+        [output appendString:@"\nThe barcode could not be decoded at this distortion level.\n"];
+        [output appendString:@"Try reducing the distortion intensity."];
+    }
+    
+    [self.textView setString:output];
+}
+
+- (void)progressiveTestSliderChanged:(id)sender {
+    [self updateProgressiveTestLabel];
+    
+    // Real-time test as slider changes
+    if ([self.progressiveTestSlider isEnabled] && self.currentImage && self.originalEncodedData) {
+        float intensity = [self.progressiveTestSlider floatValue];
+        NSInteger distIndex = [self.distortionTypePopup indexOfSelectedItem];
+        if (distIndex >= 0) {
+            DistortionType distType = (DistortionType)[[self.distortionTypePopup selectedItem] tag];
+            DistortionParameters *params = [DistortionParameters parametersWithType:distType intensity:intensity strength:0.5f];
+            NSImage *distortedImage = [ImageDistorter applyDistortion:params toImage:self.originalImage];
+            if (distortedImage) {
+                self.currentImage = distortedImage;
+                [self.imageView setImage:distortedImage];
+                
+                // Try to decode in background
+                NSArray *results = [self.decoder decodeBarcodesFromImage:distortedImage originalInput:self.originalEncodedData];
+                if (results && results.count > 0) {
+                    BarcodeResult *decodeResult = [results objectAtIndex:0];
+                    BOOL matches = decodeResult.originalInput && [decodeResult.data isEqualToString:decodeResult.originalInput];
+                    [self.progressiveTestLabel setStringValue:[NSString stringWithFormat:@"Intensity: %.2f [Decoded: %@]", intensity, matches ? @"✓" : @"✗"]];
+                } else {
+                    [self.progressiveTestLabel setStringValue:[NSString stringWithFormat:@"Intensity: %.2f [Failed]", intensity]];
+                }
+            }
+        }
+    }
+}
+
+- (void)updateProgressiveTestLabel {
+    float intensity = [self.progressiveTestSlider floatValue];
+    [self.progressiveTestLabel setStringValue:[NSString stringWithFormat:@"Intensity: %.2f", intensity]];
+}
+
+- (void)runProgressiveTest:(id)sender {
+    if (![self.encoder hasBackend] || ![self.decoder hasBackend]) {
+        [self.textView setString:@"Both encoder and decoder are required for testing."];
+        return;
+    }
+    
+    NSString *testData = [self.encodeTextField stringValue];
+    if (!testData || testData.length == 0) {
+        [self.textView setString:@"Please enter test data in the encoding field first."];
+        return;
+    }
+    
+    NSInteger selectedIndex = [self.symbologyPopup indexOfSelectedItem];
+    if (selectedIndex < 0) {
+        [self.textView setString:@"Please select a barcode type."];
+        return;
+    }
+    
+    int symbology = [[self.symbologyPopup selectedItem] tag];
+    NSInteger distIndex = [self.distortionTypePopup indexOfSelectedItem];
+    if (distIndex < 0) {
+        [self.textView setString:@"Please select a distortion type."];
+        return;
+    }
+    
+    DistortionType distType = (DistortionType)[[self.distortionTypePopup selectedItem] tag];
+    
+    // Create new test session
+    NSString *sessionName = [NSString stringWithFormat:@"Progressive Test - %@", [[NSDate date] description]];
+    self.currentTestSession = [[BarcodeTestSession alloc] initWithName:sessionName];
+    
+    [self.textView setString:@"Running progressive distortion test...\nThis will test intensity levels from 0.0 to 1.0 in 20 steps.\n"];
+    
+    // Run progressive test in background
+    NSDictionary *testParams = [NSDictionary dictionaryWithObjectsAndKeys:
+        testData, @"data",
+        [NSNumber numberWithInt:symbology], @"symbology",
+        [NSNumber numberWithInt:distType], @"distortionType",
+        nil];
+    
+    [SSConcurrency performSelectorInBackground:@selector(runProgressiveTestInBackground:) onTarget:self withObject:testParams];
+}
+
+- (void)runProgressiveTestInBackground:(id)object {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    NSDictionary *params = (NSDictionary *)object;
+    NSString *testData = [params objectForKey:@"data"];
+    int symbology = [[params objectForKey:@"symbology"] intValue];
+    NSInteger distType = [[params objectForKey:@"distortionType"] intValue];
+    
+    NSArray *results = [self.tester runProgressiveTestWithData:testData
+                                                      symbology:symbology
+                                                  distortionType:distType
+                                                   startIntensity:0.0f
+                                                     endIntensity:1.0f
+                                                            steps:20
+                                                           session:self.currentTestSession];
+    
+    [SSConcurrency performSelectorOnMainThread:@selector(updateProgressiveTestResults:) onTarget:self withObject:results waitUntilDone:YES];
+    [pool release];
+}
+
+- (void)updateProgressiveTestResults:(NSArray *)results {
+    if (!results || results.count == 0) {
+        [self.textView setString:@"Progressive test failed: Could not run tests."];
+        return;
+    }
+    
+    [self.currentTestSession endSession];
+    NSDictionary *summary = [self.currentTestSession summaryStatistics];
+    
+    NSMutableString *output = [NSMutableString string];
+    [output appendString:@"Progressive Test Results\n"];
+    [output appendString:@"========================\n\n"];
+    [output appendFormat:@"Total Tests: %d\n", [[summary objectForKey:@"totalTests"] intValue]];
+    [output appendFormat:@"Successful Decodes: %d\n", [[summary objectForKey:@"successfulDecodes"] intValue]];
+    [output appendFormat:@"Matching Decodes: %d\n", [[summary objectForKey:@"matchingDecodes"] intValue]];
+    
+    NSNumber *avgQuality = [summary objectForKey:@"averageQuality"];
+    if (avgQuality) {
+        [output appendFormat:@"Average Quality: %.1f/100\n", [avgQuality floatValue]];
+    }
+    
+    NSNumber *successRate = [summary objectForKey:@"successRate"];
+    if (successRate) {
+        [output appendFormat:@"Success Rate: %.1f%%\n", [successRate floatValue]];
+    }
+    
+    [output appendString:@"\n--- Detailed Results ---\n\n"];
+    
+    NSInteger successCount = 0;
+    NSInteger failureCount = 0;
+    float lastSuccessIntensity = -1.0f;
+    float firstFailureIntensity = -1.0f;
+    
+    NSInteger i;
+    for (i = 0; i < results.count; i++) {
+        BarcodeTestResult *result = [results objectAtIndex:i];
+        if (result.decodeSuccess) {
+            successCount++;
+            lastSuccessIntensity = result.distortionIntensity;
+        } else {
+            failureCount++;
+            if (firstFailureIntensity < 0.0f) {
+                firstFailureIntensity = result.distortionIntensity;
+            }
+        }
+    }
+    
+    if (firstFailureIntensity >= 0.0f) {
+        [output appendFormat:@"First Failure at Intensity: %.2f\n", firstFailureIntensity];
+        if (lastSuccessIntensity >= 0.0f) {
+            [output appendFormat:@"Last Success at Intensity: %.2f\n", lastSuccessIntensity];
+            [output appendFormat:@"Failure Threshold: ~%.2f\n", (lastSuccessIntensity + firstFailureIntensity) / 2.0f];
+        }
+    } else {
+        [output appendString:@"All tests passed! Barcode is resilient to this distortion type.\n"];
+    }
+    
+    [self.exportTestResultsButton setEnabled:YES];
+    [self.textView setString:output];
+}
+
+- (void)exportTestResults:(id)sender {
+    if (!self.currentTestSession || self.currentTestSession.results.count == 0) {
+        [self.textView setString:@"No test results to export."];
+        return;
+    }
+    
+    SSFileDialog *dialog = [SSFileDialog saveDialog];
+    [dialog setAllowedFileTypes:[NSArray arrayWithObjects:@"csv", @"json", @"txt", nil]];
+    [dialog setCanCreateDirectories:YES];
+    
+#if __has_feature(blocks) || (TARGET_OS_IPHONE && __clang__)
+    [dialog showWithCompletionHandler:^(SSFileDialogResult result, NSArray *urls) {
+        if (result == SSFileDialogResultOK && urls.count > 0) {
+            NSURL *fileURL = [urls objectAtIndex:0];
+            [self exportTestResultsToURL:fileURL];
+        }
+    }];
+#else
+    NSArray *urls = [dialog showModal];
+    if (urls && urls.count > 0) {
+        NSURL *fileURL = [urls objectAtIndex:0];
+        [self exportTestResultsToURL:fileURL];
+    }
+#endif
+}
+
+- (void)exportTestResultsToURL:(NSURL *)url {
+    NSString *extension = [[url pathExtension] lowercaseString];
+    NSString *content = nil;
+    
+    if ([extension isEqualToString:@"csv"]) {
+        content = [self.currentTestSession exportToCSV];
+    } else if ([extension isEqualToString:@"json"]) {
+        content = [self.currentTestSession exportToJSON];
+    } else {
+        // Default to CSV
+        content = [self.currentTestSession exportToCSV];
+    }
+    
+    if (content) {
+        SSFileSystem *fileSystem = [SSFileSystem sharedFileSystem];
+        NSData *data = [content dataUsingEncoding:NSUTF8StringEncoding];
+        NSError *error = nil;
+        BOOL success = [fileSystem writeData:data toPath:[url path] error:&error];
+        if (success) {
+            [self.textView setString:[NSString stringWithFormat:@"Test results exported successfully to:\n%@", [url path]]];
+        } else {
+            [self.textView setString:[NSString stringWithFormat:@"Error exporting results:\n%@", error ? [error localizedDescription] : @"Unknown error"]];
+        }
     }
 }
 

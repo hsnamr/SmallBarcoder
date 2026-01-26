@@ -55,6 +55,8 @@ SmallBarcodeReader_OBJC_FILES = \
 	ImageMatrix.m \
 	ImageDistorter.m \
 	DynamicLibraryLoader.m \
+	BarcodeTestResult.m \
+	BarcodeTester.m \
 	WindowController.m
 
 # Conditionally add ZBar files only if both headers and library are available
@@ -82,6 +84,8 @@ SmallBarcodeReader_HEADER_FILES = \
 	ImageMatrix.h \
 	ImageDistorter.h \
 	DynamicLibraryLoader.h \
+	BarcodeTestResult.h \
+	BarcodeTester.h \
 	WindowController.h
 
 # Conditionally add ZBar headers only if headers are available
