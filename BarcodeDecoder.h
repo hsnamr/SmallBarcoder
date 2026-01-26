@@ -6,7 +6,12 @@
 //
 
 #import <Foundation/Foundation.h>
+
+#if TARGET_OS_IPHONE
+#import <UIKit/UIKit.h>
+#else
 #import <AppKit/AppKit.h>
+#endif
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -48,16 +53,16 @@ NS_ASSUME_NONNULL_BEGIN
 /// Check if a backend is available
 - (BOOL)hasBackend;
 
-/// Decode barcodes from an NSImage
-/// @param image The image to decode
+/// Decode barcodes from an image
+/// @param image The image to decode (NSImage on macOS/Linux/Windows, UIImage on iOS)
 /// @return Array of BarcodeResult objects, or nil on error
-- (NSArray *)decodeBarcodesFromImage:(NSImage *)image;
+- (NSArray *)decodeBarcodesFromImage:(id)image;
 
-/// Decode barcodes from an NSImage with original input for matching
-/// @param image The image to decode
+/// Decode barcodes from an image with original input for matching
+/// @param image The image to decode (NSImage on macOS/Linux/Windows, UIImage on iOS)
 /// @param originalInput Original input data (if this image was encoded, for matching)
 /// @return Array of BarcodeResult objects, or nil on error
-- (NSArray *)decodeBarcodesFromImage:(NSImage *)image originalInput:(NSString *)originalInput;
+- (NSArray *)decodeBarcodesFromImage:(id)image originalInput:(NSString *)originalInput;
 
 /// Decode barcodes from image data
 /// @param imageData The image data (JPEG, PNG, etc.)

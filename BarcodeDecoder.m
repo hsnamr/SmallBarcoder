@@ -9,6 +9,11 @@
 #import "BarcodeDecoderBackend.h"
 #import <string.h>
 
+#if TARGET_OS_IPHONE
+#import <UIKit/UIKit.h>
+#import <CoreGraphics/CoreGraphics.h>
+#endif
+
 // Conditionally import ZBar if available
 #if defined(HAVE_ZBAR)
 #import "BarcodeDecoderZBar.h"
@@ -123,11 +128,11 @@
     return (_backend != nil);
 }
 
-- (NSArray *)decodeBarcodesFromImage:(NSImage *)image {
+- (NSArray *)decodeBarcodesFromImage:(id)image {
     return [self decodeBarcodesFromImage:image originalInput:nil];
 }
 
-- (NSArray *)decodeBarcodesFromImage:(NSImage *)image originalInput:(NSString *)originalInput {
+- (NSArray *)decodeBarcodesFromImage:(id)image originalInput:(NSString *)originalInput {
     // Check if backend is available
     if (!_backend) {
         return nil; // No backend available - caller should show error message
@@ -137,7 +142,65 @@
         return nil;
     }
     
-    // Convert NSImage to NSData (TIFF representation)
+#if TARGET_OS_IPHONE
+    // iOS: Convert UIImage to raw pixel data
+    UIImage *uiImage = nil;
+    if ([image isKindOfClass:[UIImage class]]) {
+        uiImage = (UIImage *)image;
+    } else {
+        // Try to extract UIImage from NSImage representation
+        // On iOS, NSImage might wrap UIImage
+        return nil;
+    }
+    
+    // Get image dimensions
+    CGSize size = [uiImage size];
+    int width = (int)size.width;
+    int height = (int)size.height;
+    
+    // Create bitmap context
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    unsigned char *rawData = (unsigned char *)malloc(width * height * 4);
+    CGContextRef context = CGBitmapContextCreate(rawData, width, height, 8, width * 4, colorSpace, kCGImageAlphaPremultipliedLast);
+    CGColorSpaceRelease(colorSpace);
+    
+    // Draw image to context
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), [uiImage CGImage]);
+    
+    // Convert to grayscale
+    unsigned char *grayData = (unsigned char *)malloc(width * height);
+    int i;
+    for (i = 0; i < width * height; i++) {
+        unsigned char r = rawData[i * 4];
+        unsigned char g = rawData[i * 4 + 1];
+        unsigned char b = rawData[i * 4 + 2];
+        grayData[i] = (unsigned char)(0.299 * r + 0.587 * g + 0.114 * b);
+    }
+    
+    CGContextRelease(context);
+    free(rawData);
+    
+    // Use backend to decode
+    if (_backend && [_backend respondsToSelector:@selector(decodeBarcodesFromData:width:height:)]) {
+        NSArray *results = [_backend decodeBarcodesFromData:grayData width:(unsigned)width height:(unsigned)height];
+        
+        // Set original input for matching if provided
+        if (originalInput && results) {
+            NSInteger j;
+            for (j = 0; j < results.count; j++) {
+                BarcodeResult *result = [results objectAtIndex:j];
+                result.originalInput = originalInput;
+            }
+        }
+        
+        free(grayData);
+        return results;
+    }
+    
+    free(grayData);
+    return nil;
+#else
+    // macOS/Linux/Windows: Convert NSImage to NSData (TIFF representation)
     NSData *tiffData = [image TIFFRepresentation];
     if (!tiffData) {
         return nil;
@@ -224,6 +287,7 @@
     // No backend available
     free(rawData);
     return nil;
+#endif
 }
 
 - (NSArray *)decodeBarcodesFromImageData:(NSData *)imageData {

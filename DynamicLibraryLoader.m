@@ -61,7 +61,10 @@ static NSString *_lastError = nil;
 @implementation DynamicLibraryLoader
 
 + (NSString *)libraryExtension {
-#if TARGET_OS_MAC && !TARGET_OS_IPHONE
+#if TARGET_OS_IPHONE || TARGET_OS_WIN32
+    // Dynamic library loading not supported on iOS/Windows
+    return nil;
+#elif TARGET_OS_MAC && !TARGET_OS_IPHONE
     return @".dylib";
 #else
     return @".so";
@@ -69,6 +72,10 @@ static NSString *_lastError = nil;
 }
 
 + (NSArray *)standardSearchPaths {
+#if TARGET_OS_IPHONE || TARGET_OS_WIN32
+    // Dynamic library loading not supported on iOS/Windows
+    return [NSArray array];
+#else
     NSMutableArray *paths = [NSMutableArray array];
     
 #if TARGET_OS_MAC && !TARGET_OS_IPHONE
@@ -96,6 +103,7 @@ static NSString *_lastError = nil;
 #endif
     
     return paths;
+#endif
 }
 
 + (NSString *)findLibrary:(NSString *)libraryName {
@@ -135,6 +143,15 @@ static NSString *_lastError = nil;
 }
 
 + (DynamicLibrary *)loadLibraryAtPath:(NSString *)path error:(NSError **)error {
+#if TARGET_OS_IPHONE || TARGET_OS_WIN32
+    // Dynamic library loading not supported on iOS/Windows
+    if (error) {
+        *error = [NSError errorWithDomain:@"DynamicLibraryLoader" code:100 userInfo:
+            [NSDictionary dictionaryWithObject:@"Dynamic library loading is not supported on this platform. Libraries must be statically linked." forKey:NSLocalizedDescriptionKey]];
+    }
+    _lastError = @"Dynamic library loading not supported on this platform";
+    return nil;
+#else
     if (!path || path.length == 0) {
         if (error) {
             *error = [NSError errorWithDomain:@"DynamicLibraryLoader" code:1 userInfo:
@@ -169,6 +186,7 @@ static NSString *_lastError = nil;
     
     _lastError = nil;
     return [[[DynamicLibrary alloc] initWithHandle:handle path:path] autorelease];
+#endif
 }
 
 + (void)unloadLibrary:(DynamicLibrary *)library {

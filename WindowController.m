@@ -297,7 +297,8 @@
     [self.clearDistortionButton setEnabled:NO];
     [contentView addSubview:self.clearDistortionButton];
     
-    // Load Library button
+    // Load Library button (only on platforms that support dynamic loading)
+#if !TARGET_OS_IPHONE && !TARGET_OS_WIN32
     NSRect loadLibraryRect = NSMakeRect(20, 50, 120, 32);
     self.loadLibraryButton = [[NSButton alloc] initWithFrame:loadLibraryRect];
     [self.loadLibraryButton setTitle:@"Load Library..."];
@@ -306,6 +307,7 @@
     [self.loadLibraryButton setTarget:self];
     [self.loadLibraryButton setAction:@selector(loadLibrary:)];
     [contentView addSubview:self.loadLibraryButton];
+#endif
     
     [self updateDistortionLabels];
 }
@@ -317,7 +319,8 @@
     [dialog setAllowsMultipleSelection:NO];
     [dialog setAllowedFileTypes:[NSArray arrayWithObjects:@"jpg", @"jpeg", @"png", @"tiff", @"tif", nil]];
     
-#if TARGET_OS_MAC && !TARGET_OS_IPHONE
+#if __has_feature(blocks) || (TARGET_OS_IPHONE && __clang__)
+    // Use completion handler on platforms that support blocks (iOS, macOS, Windows)
     [dialog showWithCompletionHandler:^(SSFileDialogResult result, NSArray *urls) {
         if (result == SSFileDialogResultOK && urls.count > 0) {
             NSURL *fileURL = [urls objectAtIndex:0];
@@ -325,6 +328,7 @@
         }
     }];
 #else
+    // GNUstep: Use modal dialog
     NSArray *urls = [dialog showModal];
     if (urls && urls.count > 0) {
         NSURL *fileURL = [urls objectAtIndex:0];
@@ -334,6 +338,36 @@
 }
 
 - (void)loadImageFromURL:(NSURL *)url {
+#if TARGET_OS_IPHONE
+    // iOS: Load UIImage
+    UIImage *uiImage = nil;
+    NSData *imageData = [NSData dataWithContentsOfURL:url];
+    if (imageData) {
+        uiImage = [UIImage imageWithData:imageData];
+    }
+    
+    if (uiImage) {
+        // Store UIImage directly (decoder will handle conversion)
+        self.currentImage = (id)uiImage; // Store as id to work with both UIImage and NSImage
+        self.originalImage = (id)uiImage;
+        
+        // Set image in image view (UIImageView on iOS)
+        if ([self.imageView respondsToSelector:@selector(setImage:)]) {
+            [self.imageView performSelector:@selector(setImage:) withObject:uiImage];
+        }
+        
+        [self.decodeButton setEnabled:YES];
+        [self.applyDistortionButton setEnabled:YES];
+        [self.previewDistortionButton setEnabled:YES];
+        self.originalEncodedData = nil;
+        [self.distorter clearDistortions];
+        [self.clearDistortionButton setEnabled:NO];
+        [self.textView setString:[NSString stringWithFormat:@"Image loaded: %@\n\nClick 'Decode' to scan for barcodes, or apply distortions to test decodability.", [url lastPathComponent] ? [url lastPathComponent] : @"from Photos/Files"]];
+    } else {
+        [self.textView setString:[NSString stringWithFormat:@"Error: Could not load image from:\n%@\n\nPlease ensure the file is a valid image format (JPEG, PNG).", url]];
+    }
+#else
+    // macOS/Linux/Windows: Use NSImage directly
     NSImage *image = [[NSImage alloc] initWithContentsOfURL:url];
     if (image) {
         self.currentImage = image;
@@ -351,6 +385,7 @@
         // Show error in text view instead of popup
         [self.textView setString:[NSString stringWithFormat:@"Error: Could not load image from:\n%@\n\nPlease ensure the file exists and is a valid image format (JPEG, PNG, TIFF).", url]];
     }
+#endif
 }
 
 - (void)decodeImage:(id)sender {
@@ -625,7 +660,8 @@
     [dialog setAllowedFileTypes:[NSArray arrayWithObjects:@"png", @"jpg", @"jpeg", @"tiff", @"tif", nil]];
     [dialog setCanCreateDirectories:YES];
     
-#if TARGET_OS_MAC && !TARGET_OS_IPHONE
+#if __has_feature(blocks) || (TARGET_OS_IPHONE && __clang__)
+    // Use completion handler on platforms that support blocks
     [dialog showWithCompletionHandler:^(SSFileDialogResult result, NSArray *urls) {
         if (result == SSFileDialogResultOK && urls.count > 0) {
             NSURL *fileURL = [urls objectAtIndex:0];
@@ -633,6 +669,7 @@
         }
     }];
 #else
+    // GNUstep: Use modal dialog
     NSArray *urls = [dialog showModal];
     if (urls && urls.count > 0) {
         NSURL *fileURL = [urls objectAtIndex:0];
@@ -799,26 +836,35 @@
 }
 
 - (void)loadLibrary:(id)sender {
+#if TARGET_OS_IPHONE || TARGET_OS_WIN32
+    // Dynamic library loading not supported
+    [self.textView setString:@"Dynamic library loading is not supported on this platform.\n\nLibraries must be statically linked at build time."];
+#else
     SSFileDialog *dialog = [SSFileDialog openDialog];
     [dialog setCanChooseFiles:YES];
     [dialog setCanChooseDirectories:NO];
     [dialog setAllowsMultipleSelection:NO];
     
     NSString *extension = [DynamicLibraryLoader libraryExtension];
-    [dialog setAllowedFileTypes:[NSArray arrayWithObjects:extension, nil]];
-    
-#if TARGET_OS_MAC && !TARGET_OS_IPHONE
-    [dialog showWithCompletionHandler:^(SSFileDialogResult result, NSArray *urls) {
-        if (result == SSFileDialogResultOK && urls.count > 0) {
+    if (extension) {
+        [dialog setAllowedFileTypes:[NSArray arrayWithObjects:extension, nil]];
+        
+#if __has_feature(blocks) || (TARGET_OS_IPHONE && __clang__)
+        [dialog showWithCompletionHandler:^(SSFileDialogResult result, NSArray *urls) {
+            if (result == SSFileDialogResultOK && urls.count > 0) {
+                NSURL *fileURL = [urls objectAtIndex:0];
+                [self loadLibraryFromURL:fileURL];
+            }
+        }];
+#else
+        NSArray *urls = [dialog showModal];
+        if (urls && urls.count > 0) {
             NSURL *fileURL = [urls objectAtIndex:0];
             [self loadLibraryFromURL:fileURL];
         }
-    }];
-#else
-    NSArray *urls = [dialog showModal];
-    if (urls && urls.count > 0) {
-        NSURL *fileURL = [urls objectAtIndex:0];
-        [self loadLibraryFromURL:fileURL];
+#endif
+    } else {
+        [self.textView setString:@"Dynamic library loading is not available on this platform."];
     }
 #endif
 }
