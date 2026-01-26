@@ -7,9 +7,17 @@
 
 #import "BarcodeDecoder.h"
 #import "BarcodeDecoderBackend.h"
-#import "BarcodeDecoderZBar.h"
 #import "BarcodeDecoderZInt.h"
 #import <string.h>
+
+// Conditionally import ZBar if available
+// Only include if HAVE_ZBAR is defined (which means ZBar backend is being compiled)
+#if defined(HAVE_ZBAR)
+#import "BarcodeDecoderZBar.h"
+#define ZBAR_BACKEND_AVAILABLE 1
+#else
+#define ZBAR_BACKEND_AVAILABLE 0
+#endif
 
 @implementation BarcodeResult
 
@@ -31,10 +39,12 @@
 + (NSArray *)availableBackends {
     NSMutableArray *backends = [NSMutableArray array];
     
-    // Check ZBar
+    // Check ZBar (if compiled in)
+#if ZBAR_BACKEND_AVAILABLE
     if ([BarcodeDecoderZBar isAvailable]) {
         [backends addObject:[BarcodeDecoderZBar backendName]];
     }
+#endif
     
     // Check ZInt (currently returns NO as it doesn't support decoding)
     if ([BarcodeDecoderZInt isAvailable]) {
@@ -48,12 +58,15 @@
     // Auto-detect and use first available backend
     id backend = nil;
     
-    // Try ZBar first (primary decoding library)
+    // Try ZBar first (primary decoding library) if compiled in
+#if ZBAR_BACKEND_AVAILABLE
     if ([BarcodeDecoderZBar isAvailable]) {
         backend = [[BarcodeDecoderZBar alloc] init];
     }
+    else
+#endif
     // Try ZInt (currently not available for decoding)
-    else if ([BarcodeDecoderZInt isAvailable]) {
+    if ([BarcodeDecoderZInt isAvailable]) {
         backend = [[BarcodeDecoderZInt alloc] init];
     }
     
