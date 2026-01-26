@@ -15,7 +15,9 @@ A cross-platform barcode application for macOS and GNUstep that can decode and e
 
 ## Supported Barcode Formats
 
-The application uses ZBar library which supports:
+The application supports multiple barcode formats through optional libraries:
+
+### ZBar (Decoding)
 - EAN-13/UPC-A
 - UPC-E
 - EAN-8
@@ -24,6 +26,12 @@ The application uses ZBar library which supports:
 - Interleaved 2 of 5
 - QR Code
 - And more...
+
+### ZInt (Encoding - Upcoming)
+- ZInt library support for barcode encoding will be implemented in a future version
+- Currently, ZInt is included in the build system but encoding functionality is not yet available
+
+**Note:** The application can build and run without either library. If no barcode libraries are available, the app will display helpful error messages in the text area.
 
 ## Requirements
 
