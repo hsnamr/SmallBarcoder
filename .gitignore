@@ -1,0 +1,25 @@
+# Build artifacts
+*.o
+*.d
+*.app
+SmallBarcodeReader
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+build/
+DerivedData/
+
+# GNUstep
+obj/
+*.make
+*.stamp
+
+# macOS
+.DS_Store
+
+# Editor
+*.swp
+*~
+.vscode/
+.idea/
