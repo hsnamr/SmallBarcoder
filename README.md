@@ -1,14 +1,17 @@
 # Small Barcode Reader
 
-A cross-platform barcode reader application for macOS and GNUstep that can decode barcodes from JPEG and PNG images.
+A cross-platform barcode application for macOS and GNUstep that can decode and encode barcodes from JPEG and PNG images.
 
 ## Features
 
 - Load and display JPEG and PNG images
-- Decode multiple barcode formats using ZBar library
+- Decode multiple barcode formats using ZBar or ZInt libraries
 - Display decoded barcode data and type information
 - Cross-platform support (macOS and GNUstep/Linux)
 - Uses SmallStep framework for platform abstraction
+- Optional library support - app runs without barcode libraries (shows helpful error messages)
+- **Encoding**: Upcoming feature (not yet implemented)
+- **Image distortion testing**: Upcoming feature to generate distorted images for testing decoding limits
 
 ## Supported Barcode Formats
 
@@ -28,24 +31,31 @@ The application uses ZBar library which supports:
 
 - macOS 10.12 or later
 - Xcode with Command Line Tools
-- ZBar library (install via Homebrew: `brew install zbar`)
+- **Optional:** ZBar library for decoding (install via Homebrew: `brew install zbar`)
+- **Optional:** ZInt library for encoding (install via Homebrew: `brew install zint`)
 
 ### GNUstep/Linux
 
 - GNUstep Base and GUI libraries
-- ZBar development libraries (required)
 - GCC or Clang compiler
+- **Optional:** ZBar development libraries for decoding
+- **Optional:** ZInt development libraries for encoding
 
-**Important:** You must install ZBar development headers before building:
+**Note:** The application can build and run without barcode libraries. However, to use barcode decoding functionality, you need at least one library installed.
+
+**Installing barcode libraries (optional):**
 ```bash
 # Ubuntu/Debian
-sudo apt-get install libzbar-dev
+sudo apt-get install libzbar-dev    # For decoding
+sudo apt-get install libzint-dev    # For encoding (upcoming)
 
 # Fedora
 sudo dnf install zbar-devel
+sudo dnf install zint-devel
 
 # Arch Linux
 sudo pacman -S zbar
+sudo pacman -S zint
 
 # Or build from source
 ```
@@ -54,9 +64,10 @@ sudo pacman -S zbar
 
 ### macOS
 
-1. Install ZBar:
+1. **Optional:** Install barcode libraries:
    ```bash
-   brew install zbar
+   brew install zbar    # For decoding
+   brew install zint    # For encoding (upcoming)
    ```
 
 2. Build SmallStep first (if not already built):
@@ -69,9 +80,10 @@ sudo pacman -S zbar
    ```bash
    cd SmallBarcodeReader
    # Create Xcode project or use command line:
-   clang -framework AppKit -framework Foundation -lzbar \
+   clang -framework AppKit -framework Foundation \
      -I../SmallStep/SmallStep/Core \
      *.m -o SmallBarcodeReader
+   # Note: Add -lzbar and/or -lzint if libraries are installed
    ```
 
 ### GNUstep/Linux
@@ -116,10 +128,17 @@ SmallBarcodeReader/
 
 ## Dependencies
 
-- **SmallStep**: Cross-platform abstraction layer (../SmallStep)
-- **ZBar**: Open-source barcode reading library
-- **AppKit/GNUstep GUI**: GUI framework
-- **Foundation**: Core Objective-C framework
+- **SmallStep**: Cross-platform abstraction layer (../SmallStep) - **Required**
+- **ZBar**: Open-source barcode decoding library - **Optional** (for decoding functionality)
+- **ZInt**: Open-source barcode encoding library - **Optional** (for encoding functionality, upcoming)
+- **AppKit/GNUstep GUI**: GUI framework - **Required**
+- **Foundation**: Core Objective-C framework - **Required**
+
+The application uses a plugin architecture that allows it to work with multiple barcode libraries. Currently supported:
+- **ZBar**: Primary library for barcode decoding
+- **ZInt**: Library for barcode encoding (decoding support may be added in the future)
+
+Both libraries are optional - the app will build and run without them, displaying helpful error messages when barcode operations are attempted.
 
 ## License
 
@@ -127,16 +146,19 @@ See LICENSE file for details.
 
 ## Troubleshooting
 
-### ZBar not found
+### No barcode decoder available
 
-If you get linker errors about ZBar:
-- macOS: Ensure ZBar is installed via Homebrew and in your library path
-- Linux: Install libzbar-dev package
+If you see an error message about no barcode decoder being available:
+- The app can run without barcode libraries, but decoding won't work
+- Install at least one barcode library (ZBar for decoding, or ZInt for encoding)
+- See the Requirements section for installation instructions
+- The error message in the text area will provide specific instructions
 
 ### Image loading fails
 
 - Ensure the image file is a valid JPEG or PNG
 - Check file permissions
+- Error messages are displayed in the text area (no popups)
 
 ### No barcodes detected
 
@@ -144,3 +166,11 @@ If you get linker errors about ZBar:
 - Try a higher resolution image
 - Check that the barcode is not damaged or obscured
 - Some barcode formats may require specific image quality
+- Verify that a barcode library (ZBar) is installed and available
+
+### Library linking issues
+
+- The app automatically detects available libraries during build
+- If a library is installed but not detected, check that development headers are installed
+- For ZBar: ensure `libzbar-dev` (Linux) or `zbar` (macOS via Homebrew) is installed
+- For ZInt: ensure `libzint-dev` (Linux) or `zint` (macOS via Homebrew) is installed
