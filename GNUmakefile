@@ -51,6 +51,7 @@ SmallBarcodeReader_OBJC_FILES = \
 	main.m \
 	AppDelegate.m \
 	BarcodeDecoder.m \
+	BarcodeEncoder.m \
 	WindowController.m
 
 # Conditionally add ZBar files only if both headers and library are available
@@ -64,6 +65,7 @@ endif
 ifneq ($(ZINT_INCLUDE),)
   ifneq ($(ZINT_LIBS),)
     SmallBarcodeReader_OBJC_FILES += BarcodeDecoderZInt.m
+    SmallBarcodeReader_OBJC_FILES += BarcodeEncoderZInt.m
   endif
 endif
 
@@ -72,6 +74,8 @@ SmallBarcodeReader_HEADER_FILES = \
 	AppDelegate.h \
 	BarcodeDecoder.h \
 	BarcodeDecoderBackend.h \
+	BarcodeEncoder.h \
+	BarcodeEncoderBackend.h \
 	WindowController.h
 
 # Conditionally add ZBar headers only if headers are available
@@ -82,6 +86,7 @@ endif
 # Conditionally add ZInt headers only if headers are available
 ifneq ($(ZINT_INCLUDE),)
   SmallBarcodeReader_HEADER_FILES += BarcodeDecoderZInt.h
+  SmallBarcodeReader_HEADER_FILES += BarcodeEncoderZInt.h
 endif
 
 SmallBarcodeReader_RESOURCE_FILES = \

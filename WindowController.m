@@ -7,6 +7,7 @@
 
 #import "WindowController.h"
 #import "BarcodeDecoder.h"
+#import "BarcodeEncoder.h"
 #import "../SmallStep/SmallStep/Core/SmallStep.h"
 
 @interface WindowController (Private)
@@ -14,6 +15,10 @@
 - (void)loadImageFromURL:(NSURL *)url;
 - (void)decodeInBackground:(id)object;
 - (void)updateResults:(NSArray *)results;
+- (void)encodeInBackground:(id)object;
+- (void)updateEncodedImage:(NSImage *)image;
+- (void)populateSymbologyPopup;
+- (void)saveImageToURL:(NSURL *)url;
 
 @end
 
@@ -24,13 +29,20 @@
 @synthesize textScrollView;
 @synthesize openButton;
 @synthesize decodeButton;
+@synthesize encodeButton;
+@synthesize saveButton;
+@synthesize encodeTextField;
+@synthesize symbologyPopup;
 @synthesize decoder;
+@synthesize encoder;
 @synthesize currentImage;
+@synthesize originalEncodedData;
 
 - (instancetype)init {
     self = [super init];
     if (self) {
         decoder = [[BarcodeDecoder alloc] init];
+        encoder = [[BarcodeEncoder alloc] init];
         [self setupWindow];
     }
     return self;
@@ -42,14 +54,20 @@
     [textScrollView release];
     [openButton release];
     [decodeButton release];
+    [encodeButton release];
+    [saveButton release];
+    [encodeTextField release];
+    [symbologyPopup release];
     [decoder release];
+    [encoder release];
     [currentImage release];
+    [originalEncodedData release];
     [super dealloc];
 }
 
 - (void)setupWindow {
-    // Create window using SmallStep abstraction
-    NSRect windowRect = NSMakeRect(100, 100, 800, 600);
+    // Create window using SmallStep abstraction - make it wider for encoding UI
+    NSRect windowRect = NSMakeRect(100, 100, 900, 700);
     NSWindow *window = [[NSWindow alloc] initWithContentRect:windowRect
                                                     styleMask:[SSWindowStyle standardWindowMask]
                                                       backing:NSBackingStoreBuffered
@@ -61,7 +79,7 @@
     NSView *contentView = [window contentView];
     
     // Create image view
-    NSRect imageViewRect = NSMakeRect(20, 300, 360, 260);
+    NSRect imageViewRect = NSMakeRect(20, 350, 360, 300);
     self.imageView = [[NSImageView alloc] initWithFrame:imageViewRect];
     [self.imageView setImageAlignment:NSImageAlignCenter];
     [self.imageView setImageScaling:NSImageScaleProportionallyUpOrDown];
@@ -69,7 +87,7 @@
     [contentView addSubview:self.imageView];
     
     // Create text view with scroll view
-    NSRect textScrollRect = NSMakeRect(400, 50, 380, 510);
+    NSRect textScrollRect = NSMakeRect(400, 50, 480, 600);
     self.textScrollView = [[NSScrollView alloc] initWithFrame:textScrollRect];
     [self.textScrollView setHasVerticalScroller:YES];
     [self.textScrollView setHasHorizontalScroller:YES];
@@ -81,28 +99,40 @@
     [self.textView setEditable:NO];
     [self.textView setFont:[NSFont systemFontOfSize:12]];
     // Check if any backends are available and show appropriate message
-    NSArray *availableBackends = [BarcodeDecoder availableBackends];
-    if (availableBackends.count == 0) {
+    NSArray *availableDecoders = [BarcodeDecoder availableBackends];
+    NSArray *availableEncoders = [BarcodeEncoder availableBackends];
+    if (availableDecoders.count == 0 && availableEncoders.count == 0) {
         NSMutableString *msg = [NSMutableString string];
-        [msg appendString:@"No barcode decoder libraries available.\n\n"];
-        [msg appendString:@"This application requires a barcode decoding library to function:\n"];
+        [msg appendString:@"No barcode libraries available.\n\n"];
+        [msg appendString:@"This application requires barcode libraries to function:\n"];
         [msg appendString:@"- ZBar (libzbar) for barcode decoding\n"];
-        [msg appendString:@"- ZInt (libzint) for barcode encoding (decoding not yet supported)\n\n"];
-        [msg appendString:@"Please install one of these libraries:\n"];
-        [msg appendString:@"- Linux: sudo apt-get install libzbar-dev\n"];
-        [msg appendString:@"- macOS: brew install zbar\n\n"];
-        [msg appendString:@"Note: Dynamic library loading will be available in a future version.\n\n"];
-        [msg appendString:@"Click 'Open Image' to load an image (decoding will show an error message)."];
+        [msg appendString:@"- ZInt (libzint) for barcode encoding\n\n"];
+        [msg appendString:@"Please install at least one library:\n"];
+        [msg appendString:@"- Linux: sudo apt-get install libzbar-dev libzint-dev\n"];
+        [msg appendString:@"- macOS: brew install zbar zint\n\n"];
+        [msg appendString:@"Note: Dynamic library loading will be available in a future version."];
         [self.textView setString:msg];
     } else {
-        [self.textView setString:@"No image loaded.\n\nClick 'Open Image' to load a JPEG or PNG image containing barcodes."];
+        NSMutableString *msg = [NSMutableString string];
+        [msg appendString:@"Small Barcode Reader\n"];
+        [msg appendString:@"====================\n\n"];
+        if (availableDecoders.count > 0) {
+            [msg appendFormat:@"Decoders: %@\n", [availableDecoders componentsJoinedByString:@", "]];
+        }
+        if (availableEncoders.count > 0) {
+            [msg appendFormat:@"Encoders: %@\n", [availableEncoders componentsJoinedByString:@", "]];
+        }
+        [msg appendString:@"\n"];
+        [msg appendString:@"Decoding: Click 'Open Image' to load an image, then 'Decode'.\n"];
+        [msg appendString:@"Encoding: Enter text below, select barcode type, then 'Encode'."];
+        [self.textView setString:msg];
     }
     
     [self.textScrollView setDocumentView:self.textView];
     [contentView addSubview:self.textScrollView];
     
     // Create open button
-    NSRect buttonRect = NSMakeRect(20, 250, 120, 32);
+    NSRect buttonRect = NSMakeRect(20, 300, 120, 32);
     self.openButton = [[NSButton alloc] initWithFrame:buttonRect];
     [self.openButton setTitle:@"Open Image..."];
     [self.openButton setButtonType:NSMomentaryPushInButton];
@@ -112,7 +142,7 @@
     [contentView addSubview:self.openButton];
     
     // Create decode button
-    NSRect decodeButtonRect = NSMakeRect(150, 250, 120, 32);
+    NSRect decodeButtonRect = NSMakeRect(150, 300, 120, 32);
     self.decodeButton = [[NSButton alloc] initWithFrame:decodeButtonRect];
     [self.decodeButton setTitle:@"Decode"];
     [self.decodeButton setButtonType:NSMomentaryPushInButton];
@@ -121,6 +151,42 @@
     [self.decodeButton setAction:@selector(decodeImage:)];
     [self.decodeButton setEnabled:NO];
     [contentView addSubview:self.decodeButton];
+    
+    // Create encoding text field
+    NSRect textFieldRect = NSMakeRect(20, 250, 200, 24);
+    self.encodeTextField = [[NSTextField alloc] initWithFrame:textFieldRect];
+    [self.encodeTextField setPlaceholderString:@"Enter text to encode..."];
+    [self.encodeTextField setTarget:self];
+    [self.encodeTextField setAction:@selector(encodeBarcode:)];
+    [contentView addSubview:self.encodeTextField];
+    
+    // Create symbology popup
+    NSRect popupRect = NSMakeRect(230, 250, 150, 24);
+    self.symbologyPopup = [[NSPopUpButton alloc] initWithFrame:popupRect pullsDown:NO];
+    [self populateSymbologyPopup];
+    [contentView addSubview:self.symbologyPopup];
+    
+    // Create encode button
+    NSRect encodeButtonRect = NSMakeRect(20, 220, 120, 32);
+    self.encodeButton = [[NSButton alloc] initWithFrame:encodeButtonRect];
+    [self.encodeButton setTitle:@"Encode"];
+    [self.encodeButton setButtonType:NSMomentaryPushInButton];
+    [self.encodeButton setBezelStyle:NSRoundedBezelStyle];
+    [self.encodeButton setTarget:self];
+    [self.encodeButton setAction:@selector(encodeBarcode:)];
+    [self.encodeButton setEnabled:[self.encoder hasBackend]];
+    [contentView addSubview:self.encodeButton];
+    
+    // Create save button
+    NSRect saveButtonRect = NSMakeRect(150, 220, 120, 32);
+    self.saveButton = [[NSButton alloc] initWithFrame:saveButtonRect];
+    [self.saveButton setTitle:@"Save Image..."];
+    [self.saveButton setButtonType:NSMomentaryPushInButton];
+    [self.saveButton setBezelStyle:NSRoundedBezelStyle];
+    [self.saveButton setTarget:self];
+    [self.saveButton setAction:@selector(saveImage:)];
+    [self.saveButton setEnabled:NO];
+    [contentView addSubview:self.saveButton];
 }
 
 - (void)openImage:(id)sender {
@@ -212,6 +278,193 @@
         [self.textView setString:output];
     } else {
         [self.textView setString:@"No barcodes found in the image.\n\nPlease try:\n- Ensuring the image is clear and in focus\n- Using a higher resolution image\n- Checking that the barcode is not damaged or obscured"];
+    }
+}
+
+- (void)populateSymbologyPopup {
+    [self.symbologyPopup removeAllItems];
+    
+    if (![self.encoder hasBackend]) {
+        [self.symbologyPopup addItemWithTitle:@"No encoder available"];
+        [self.symbologyPopup setEnabled:NO];
+        return;
+    }
+    
+    NSArray *symbologies = [self.encoder supportedSymbologies];
+    if (symbologies.count == 0) {
+        [self.symbologyPopup addItemWithTitle:@"No symbologies available"];
+        [self.symbologyPopup setEnabled:NO];
+        return;
+    }
+    
+    [self.symbologyPopup setEnabled:YES];
+    NSInteger i;
+    for (i = 0; i < symbologies.count; i++) {
+        NSDictionary *symbology = [symbologies objectAtIndex:i];
+        NSString *name = [symbology objectForKey:@"name"];
+        if (name) {
+            [self.symbologyPopup addItemWithTitle:name];
+            // Store symbology ID in menu item's tag
+            NSNumber *symbologyId = [symbology objectForKey:@"id"];
+            if (symbologyId) {
+                [[self.symbologyPopup itemAtIndex:i] setTag:[symbologyId intValue]];
+            }
+        }
+    }
+}
+
+- (void)encodeBarcode:(id)sender {
+    if (![self.encoder hasBackend]) {
+        [self.textView setString:@"No barcode encoder available.\n\nPlease install ZInt library:\n- Linux: sudo apt-get install libzint-dev\n- macOS: brew install zint"];
+        return;
+    }
+    
+    NSString *data = [self.encodeTextField stringValue];
+    if (!data || data.length == 0) {
+        [self.textView setString:@"Please enter text to encode."];
+        return;
+    }
+    
+    NSInteger selectedIndex = [self.symbologyPopup indexOfSelectedItem];
+    if (selectedIndex < 0 || selectedIndex >= [self.symbologyPopup numberOfItems]) {
+        [self.textView setString:@"Please select a barcode type."];
+        return;
+    }
+    
+    // Store original data for matching later
+    self.originalEncodedData = data;
+    
+    [self.textView setString:@"Encoding barcode...\n"];
+    
+    // Encode on background thread
+    NSDictionary *encodeParams = [NSDictionary dictionaryWithObjectsAndKeys:
+        data, @"data",
+        [NSNumber numberWithInt:[[self.symbologyPopup selectedItem] tag]], @"symbology",
+        nil];
+    [SSConcurrency performSelectorInBackground:@selector(encodeInBackground:) onTarget:self withObject:encodeParams];
+}
+
+- (void)encodeInBackground:(id)object {
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    
+    NSDictionary *params = (NSDictionary *)object;
+    NSString *data = [params objectForKey:@"data"];
+    NSNumber *symbologyNum = [params objectForKey:@"symbology"];
+    int symbology = [symbologyNum intValue];
+    
+    NSImage *encodedImage = [self.encoder encodeBarcodeFromData:data symbology:symbology];
+    
+    [SSConcurrency performSelectorOnMainThread:@selector(updateEncodedImage:) onTarget:self withObject:encodedImage waitUntilDone:YES];
+    [pool release];
+}
+
+- (void)updateEncodedImage:(NSImage *)image {
+    if (!image) {
+        [self.textView setString:@"Encoding failed.\n\nPlease check:\n- The text is valid for the selected barcode type\n- ZInt library is properly installed\n- Try a different barcode type"];
+        return;
+    }
+    
+    self.currentImage = image;
+    [self.imageView setImage:image];
+    [self.decodeButton setEnabled:YES];
+    [self.saveButton setEnabled:YES];
+    
+    NSMutableString *output = [NSMutableString string];
+    [output appendString:@"Barcode Encoded Successfully\n"];
+    [output appendString:@"===========================\n\n"];
+    [output appendFormat:@"Data: %@\n", self.originalEncodedData];
+    [output appendFormat:@"Type: %@\n", [[self.symbologyPopup selectedItem] title]];
+    [output appendString:@"\n"];
+    [output appendString:@"The barcode image is displayed on the left.\n"];
+    [output appendString:@"You can:\n"];
+    [output appendString:@"- Click 'Decode' to verify it can be read\n"];
+    [output appendString:@"- Click 'Save Image...' to save it to a file"];
+    
+    [self.textView setString:output];
+}
+
+- (void)saveImage:(id)sender {
+    if (!self.currentImage) {
+        return;
+    }
+    
+    SSFileDialog *dialog = [SSFileDialog saveDialog];
+    [dialog setAllowedFileTypes:[NSArray arrayWithObjects:@"png", @"jpg", @"jpeg", @"tiff", @"tif", nil]];
+    [dialog setCanCreateDirectories:YES];
+    
+#if TARGET_OS_MAC && !TARGET_OS_IPHONE
+    [dialog showWithCompletionHandler:^(SSFileDialogResult result, NSArray *urls) {
+        if (result == SSFileDialogResultOK && urls.count > 0) {
+            NSURL *fileURL = [urls objectAtIndex:0];
+            [self saveImageToURL:fileURL];
+        }
+    }];
+#else
+    NSArray *urls = [dialog showModal];
+    if (urls && urls.count > 0) {
+        NSURL *fileURL = [urls objectAtIndex:0];
+        [self saveImageToURL:fileURL];
+    }
+#endif
+}
+
+- (void)saveImageToURL:(NSURL *)url {
+    // Get file extension to determine format
+    NSString *extension = [[url pathExtension] lowercaseString];
+    NSBitmapImageRep *bitmapRep = nil;
+    
+    // Get bitmap representation
+    NSArray *reps = [self.currentImage representations];
+    for (NSImageRep *rep in reps) {
+        if ([rep isKindOfClass:[NSBitmapImageRep class]]) {
+            bitmapRep = (NSBitmapImageRep *)rep;
+            break;
+        }
+    }
+    
+    if (!bitmapRep) {
+        // Create bitmap representation if none exists
+        NSRect imageRect = NSMakeRect(0, 0, [self.currentImage size].width, [self.currentImage size].height);
+        bitmapRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+                                                             pixelsWide:imageRect.size.width
+                                                             pixelsHigh:imageRect.size.height
+                                                          bitsPerSample:8
+                                                        samplesPerPixel:4
+                                                               hasAlpha:YES
+                                                               isPlanar:NO
+                                                         colorSpaceName:NSCalibratedRGBColorSpace
+                                                           bytesPerRow:0
+                                                          bitsPerPixel:0];
+        [self.currentImage lockFocus];
+        [bitmapRep setSize:imageRect.size];
+        [NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:bitmapRep]];
+        [self.currentImage drawAtPoint:NSZeroPoint fromRect:imageRect operation:NSCompositeSourceOver fraction:1.0];
+        [self.currentImage unlockFocus];
+    }
+    
+    NSData *imageData = nil;
+    if ([extension isEqualToString:@"png"]) {
+        imageData = [bitmapRep representationUsingType:NSPNGFileType properties:nil];
+    } else if ([extension isEqualToString:@"jpg"] || [extension isEqualToString:@"jpeg"]) {
+        imageData = [bitmapRep representationUsingType:NSJPEGFileType properties:nil];
+    } else if ([extension isEqualToString:@"tiff"] || [extension isEqualToString:@"tif"]) {
+        imageData = [bitmapRep representationUsingType:NSTIFFFileType properties:nil];
+    } else {
+        // Default to PNG
+        imageData = [bitmapRep representationUsingType:NSPNGFileType properties:nil];
+    }
+    
+    if (imageData) {
+        SSFileSystem *fileSystem = [SSFileSystem sharedFileSystem];
+        NSError *error = nil;
+        BOOL success = [fileSystem writeData:imageData toPath:[url path] error:&error];
+        if (success) {
+            [self.textView setString:[NSString stringWithFormat:@"Image saved successfully to:\n%@", [url path]]];
+        } else {
+            [self.textView setString:[NSString stringWithFormat:@"Error saving image:\n%@", error ? [error localizedDescription] : @"Unknown error"]];
+        }
+    } else {
+        [self.textView setString:@"Error: Could not create image data."];
     }
 }
 
