@@ -9,23 +9,11 @@
 #import "BarcodeDecoder.h"
 #import "../SmallStep/SmallStep/Core/SmallStep.h"
 
-@interface WindowController () <NSWindowDelegate> {
-    NSImageView *imageView;
-    NSTextView *textView;
-    NSScrollView *textScrollView;
-    NSButton *openButton;
-    NSButton *decodeButton;
-    BarcodeDecoder *decoder;
-    NSImage *currentImage;
-}
+@interface WindowController (Private)
 
-@property (retain, nonatomic) NSImageView *imageView;
-@property (retain, nonatomic) NSTextView *textView;
-@property (retain, nonatomic) NSScrollView *textScrollView;
-@property (retain, nonatomic) NSButton *openButton;
-@property (retain, nonatomic) NSButton *decodeButton;
-@property (retain, nonatomic) BarcodeDecoder *decoder;
-@property (retain, nonatomic) NSImage *currentImage;
+- (void)loadImageFromURL:(NSURL *)url;
+- (void)decodeInBackground:(id)object;
+- (void)updateResults:(NSArray *)results;
 
 @end
 
@@ -88,7 +76,7 @@
     [self.textScrollView setAutohidesScrollers:YES];
     [self.textScrollView setBorderType:NSBezelBorder];
     
-    NSRect textViewRect = [self.textScrollView contentSize];
+    NSRect textViewRect = NSMakeRect(0, 0, [self.textScrollView contentSize].width, [self.textScrollView contentSize].height);
     self.textView = [[NSTextView alloc] initWithFrame:textViewRect];
     [self.textView setEditable:NO];
     [self.textView setFont:[NSFont systemFontOfSize:12]];
@@ -101,8 +89,8 @@
     NSRect buttonRect = NSMakeRect(20, 250, 120, 32);
     self.openButton = [[NSButton alloc] initWithFrame:buttonRect];
     [self.openButton setTitle:@"Open Image..."];
-    [self.openButton setButtonType:NSButtonTypeMomentaryPushIn];
-    [self.openButton setBezelStyle:NSBezelStyleRounded];
+    [self.openButton setButtonType:NSMomentaryPushInButton];
+    [self.openButton setBezelStyle:NSRoundedBezelStyle];
     [self.openButton setTarget:self];
     [self.openButton setAction:@selector(openImage:)];
     [contentView addSubview:self.openButton];
@@ -111,8 +99,8 @@
     NSRect decodeButtonRect = NSMakeRect(150, 250, 120, 32);
     self.decodeButton = [[NSButton alloc] initWithFrame:decodeButtonRect];
     [self.decodeButton setTitle:@"Decode"];
-    [self.decodeButton setButtonType:NSButtonTypeMomentaryPushIn];
-    [self.decodeButton setBezelStyle:NSBezelStyleRounded];
+    [self.decodeButton setButtonType:NSMomentaryPushInButton];
+    [self.decodeButton setBezelStyle:NSRoundedBezelStyle];
     [self.decodeButton setTarget:self];
     [self.decodeButton setAction:@selector(decodeImage:)];
     [self.decodeButton setEnabled:NO];
@@ -153,7 +141,7 @@
         NSAlert *alert = [[NSAlert alloc] init];
         [alert setMessageText:@"Error Loading Image"];
         [alert setInformativeText:[NSString stringWithFormat:@"Could not load image from: %@", url]];
-        [alert setAlertStyle:NSAlertStyleWarning];
+        [alert setAlertStyle:NSWarningAlertStyle];
         [alert runModal];
     }
 }
@@ -183,7 +171,8 @@
         [output appendString:@"Barcode Decoding Results:\n"];
         [output appendString:@"========================\n\n"];
         
-        for (NSInteger i = 0; i < results.count; i++) {
+        NSInteger i;
+        for (i = 0; i < results.count; i++) {
             BarcodeResult *result = [results objectAtIndex:i];
             [output appendFormat:@"Barcode #%ld:\n", (long)(i + 1)];
             [output appendFormat:@"  Type: %@\n", result.type];

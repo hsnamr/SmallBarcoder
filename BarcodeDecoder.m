@@ -2,21 +2,87 @@
 //  BarcodeDecoder.m
 //  SmallBarcodeReader
 //
-//  Barcode decoding implementation using ZBar
+//  Generic barcode decoder implementation
 //
 
 #import "BarcodeDecoder.h"
-#import <zbar.h>
+#import "BarcodeDecoderBackend.h"
+#import "BarcodeDecoderZBar.h"
+#import "BarcodeDecoderZInt.h"
 #import <string.h>
 
 @implementation BarcodeResult
+
+@synthesize data;
+@synthesize type;
+@synthesize points;
+
+- (void)dealloc {
+    [data release];
+    [type release];
+    [points release];
+    [super dealloc];
+}
 
 @end
 
 @implementation BarcodeDecoder
 
++ (NSArray *)availableBackends {
+    NSMutableArray *backends = [NSMutableArray array];
+    
+    // Check ZBar
+    if ([BarcodeDecoderZBar isAvailable]) {
+        [backends addObject:[BarcodeDecoderZBar backendName]];
+    }
+    
+    // Check ZInt (currently returns NO as it doesn't support decoding)
+    if ([BarcodeDecoderZInt isAvailable]) {
+        [backends addObject:[BarcodeDecoderZInt backendName]];
+    }
+    
+    return backends;
+}
+
+- (instancetype)init {
+    // Auto-detect and use first available backend
+    id backend = nil;
+    
+    // Try ZBar first (primary decoding library)
+    if ([BarcodeDecoderZBar isAvailable]) {
+        backend = [[BarcodeDecoderZBar alloc] init];
+    }
+    // Try ZInt (currently not available for decoding)
+    else if ([BarcodeDecoderZInt isAvailable]) {
+        backend = [[BarcodeDecoderZInt alloc] init];
+    }
+    
+    if (!backend) {
+        [self release];
+        return nil;
+    }
+    
+    return [self initWithBackend:backend];
+}
+
+- (instancetype)initWithBackend:(id)backend {
+    self = [super init];
+    if (self) {
+        _backend = [backend retain];
+    }
+    return self;
+}
+
 - (void)dealloc {
+    [_backend release];
     [super dealloc];
+}
+
+- (NSString *)backendName {
+    if (_backend && [_backend respondsToSelector:@selector(backendName)]) {
+        return [_backend performSelector:@selector(backendName)];
+    }
+    return @"Unknown";
 }
 
 - (NSArray *)decodeBarcodesFromImage:(NSImage *)image {
@@ -55,7 +121,8 @@
     // Check if already grayscale
     if (bitsPerPixel == 8 && [bitmapRep hasAlpha] == NO) {
         // Copy grayscale data
-        for (NSInteger y = 0; y < height; y++) {
+        NSInteger y;
+        for (y = 0; y < height; y++) {
             memcpy(rawData + y * width, sourceData + y * bytesPerRow, width);
         }
         needsConversion = NO;
@@ -63,8 +130,9 @@
     
     if (needsConversion) {
         // Convert to grayscale
-        for (NSInteger y = 0; y < height; y++) {
-            for (NSInteger x = 0; x < width; x++) {
+        NSInteger y, x;
+        for (y = 0; y < height; y++) {
+            for (x = 0; x < width; x++) {
                 NSInteger sourceIndex = y * bytesPerRow + x * (bitsPerPixel / 8);
                 NSInteger destIndex = y * width + x;
                 
@@ -87,13 +155,21 @@
         }
     }
     
-    // Use ZBar to decode (ZBar will free the data)
-    NSArray *results = [self decodeWithZBar:rawData width:(unsigned)width height:(unsigned)height shouldFreeData:YES];
+    // Use backend to decode (backend will handle memory management)
+    if (_backend && [_backend respondsToSelector:@selector(decodeBarcodesFromData:width:height:)]) {
+        NSArray *results = [_backend decodeBarcodesFromData:rawData width:(unsigned)width height:(unsigned)height];
+        // Backend should handle freeing the data, but if it doesn't, we need to free it
+        // For now, we'll free it here since the backend might copy the data
+        free(rawData);
+        return results;
+    }
     
-    return results;
+    // No backend available
+    free(rawData);
+    return nil;
 }
 
-- (nullable NSArray<BarcodeResult *> *)decodeBarcodesFromImageData:(NSData *)imageData {
+- (NSArray *)decodeBarcodesFromImageData:(NSData *)imageData {
     if (!imageData) {
         return nil;
     }
@@ -103,96 +179,9 @@
         return nil;
     }
     
-    return [self decodeBarcodesFromImage:image];
-}
-
-- (NSArray *)decodeWithZBar:(unsigned char *)data width:(unsigned)width height:(unsigned)height shouldFreeData:(BOOL)shouldFree {
-    // Create ZBar image scanner
-    zbar_image_scanner_t *scanner = zbar_image_scanner_create();
-    if (!scanner) {
-        if (shouldFree) {
-            free(data);
-        }
-        return nil;
-    }
-    
-    // Configure scanner to detect all symbologies
-    zbar_image_scanner_set_config(scanner, 0, ZBAR_CFG_ENABLE, 1);
-    
-    // Create ZBar image
-    zbar_image_t *image = zbar_image_create();
-    if (!image) {
-        zbar_image_scanner_destroy(scanner);
-        if (shouldFree) {
-            free(data);
-        }
-        return nil;
-    }
-    
-    zbar_image_set_format(image, zbar_fourcc('Y','8','0','0'));
-    zbar_image_set_size(image, width, height);
-    if (shouldFree) {
-        zbar_image_set_data(image, data, width * height, zbar_image_free_data);
-    } else {
-        zbar_image_set_data(image, data, width * height, NULL);
-    }
-    
-    // Scan the image
-    int n = zbar_scan_image(scanner, image);
-    
-    NSMutableArray *results = [NSMutableArray array];
-    
-    if (n > 0) {
-        // Get first symbol
-        const zbar_symbol_t *symbol = zbar_image_first_symbol(image);
-        
-        while (symbol) {
-            BarcodeResult *result = [[BarcodeResult alloc] init];
-            
-            // Get symbol data
-            zbar_symbol_type_t typ = zbar_symbol_get_type(symbol);
-            const char *data = zbar_symbol_get_data(symbol);
-            
-            if (data) {
-                result.data = [NSString stringWithUTF8String:data];
-                if (!result.data) {
-                    // Fallback: create string from raw bytes
-                    unsigned int dataLength = zbar_symbol_get_data_length(symbol);
-                    result.data = [[NSString alloc] initWithBytes:data length:dataLength encoding:NSUTF8StringEncoding];
-                    if (!result.data) {
-                        result.data = [[NSString alloc] initWithBytes:data length:dataLength encoding:NSISOLatin1StringEncoding];
-                    }
-                }
-            } else {
-                result.data = @"";
-            }
-            
-            const char *typeName = zbar_get_symbol_name(typ);
-            result.type = typeName ? [NSString stringWithUTF8String:typeName] : @"Unknown";
-            
-            // Get symbol location points
-            NSMutableArray<NSValue *> *points = [NSMutableArray array];
-            int pointCount = zbar_symbol_get_loc_size(symbol);
-            for (int i = 0; i < pointCount; i++) {
-                int x = zbar_symbol_get_loc_x(symbol, i);
-                int y = zbar_symbol_get_loc_y(symbol, i);
-                NSRect rect = NSMakeRect(x, y, 0, 0);
-                [points addObject:[NSValue valueWithRect:rect]];
-            }
-            result.points = points;
-            
-            [results addObject:result];
-            
-            // Get next symbol
-            symbol = zbar_symbol_next(symbol);
-        }
-    }
-    
-    // Cleanup
-    zbar_image_destroy(image);
-    zbar_image_scanner_destroy(scanner);
-    
-    return results.count > 0 ? results : nil;
+    NSArray *results = [self decodeBarcodesFromImage:image];
+    [image release];
+    return results;
 }
 
 @end

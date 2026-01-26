@@ -2,7 +2,7 @@
 //  BarcodeDecoder.h
 //  SmallBarcodeReader
 //
-//  Barcode decoding using ZBar library
+//  Generic barcode decoder supporting multiple backends (ZBar, ZInt, etc.)
 //
 
 #import <Foundation/Foundation.h>
@@ -23,8 +23,23 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
-/// Barcode decoder wrapper for ZBar
-@interface BarcodeDecoder : NSObject
+/// Generic barcode decoder supporting multiple backends
+@interface BarcodeDecoder : NSObject {
+    id _backend; // id<BarcodeDecoderBackend>
+}
+
+/// Initialize with auto-detected backend
+- (instancetype)init;
+
+/// Initialize with specific backend
+/// @param backend Backend implementation (must conform to BarcodeDecoderBackend protocol)
+- (instancetype)initWithBackend:(id)backend;
+
+/// Get available backend names
++ (NSArray *)availableBackends;
+
+/// Get current backend name
+- (NSString *)backendName;
 
 /// Decode barcodes from an NSImage
 /// @param image The image to decode
