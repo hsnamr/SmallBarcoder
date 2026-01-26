@@ -1,4 +1,4 @@
-# Small Barcode Reader
+# Small Barcoder
 
 A cross-platform barcode application for macOS and GNUstep that can decode and encode barcodes from JPEG and PNG images.
 
