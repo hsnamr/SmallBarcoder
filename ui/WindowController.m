@@ -84,8 +84,6 @@
         // Create application menu using SmallStep abstraction
         applicationMenu = [[SSApplicationMenu alloc] initWithDelegate:self];
         [applicationMenu buildMenu];
-        // Show floating panel after main window is shown (deferred)
-        [self performSelector:@selector(showApplicationMenu) withObject:nil afterDelay:0.2];
         
         // Check ZInt availability and update UI (deferred to next run loop)
         [self performSelector:@selector(checkAndDisplayBackendStatus) withObject:nil afterDelay:0.1];
@@ -1126,12 +1124,6 @@
     }
 }
 
-- (void)showApplicationMenu {
-    // Show the application menu (floating panel on Linux, no-op on macOS)
-    if (applicationMenu) {
-        [applicationMenu showMenu];
-    }
-}
 
 - (void)tryAutoLoadZIntLibrary {
     // Check if encoder already has a backend
@@ -1487,11 +1479,6 @@
 }
 
 - (void)windowWillClose:(NSNotification *)notification {
-    // Close application menu (floating panel on Linux)
-    if (applicationMenu) {
-        [applicationMenu hideMenu];
-    }
-    
     // Unload all libraries before closing
     NSInteger i;
     for (i = 0; i < self.loadedLibraries.count; i++) {
