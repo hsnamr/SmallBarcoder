@@ -16,7 +16,7 @@
 @class ImageDistorter;
 @class BarcodeTester;
 @class BarcodeTestSession;
-@class FloatingMenuPanel;
+@class SSApplicationMenu;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -53,7 +53,7 @@ NS_ASSUME_NONNULL_BEGIN
     NSImage *currentImage;
     NSImage *originalImage; // Original image before distortions
     NSString *originalEncodedData; // Track original input for matching
-    FloatingMenuPanel *floatingMenuPanel;
+    SSApplicationMenu *applicationMenu;
 }
 
 @property (retain, nonatomic) NSImageView *imageView;
@@ -88,7 +88,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (retain, nonatomic) NSImage *currentImage;
 @property (retain, nonatomic) NSImage *originalImage;
 @property (retain, nonatomic) NSString *originalEncodedData;
-@property (retain, nonatomic) FloatingMenuPanel *floatingMenuPanel;
+@property (retain, nonatomic) SSApplicationMenu *applicationMenu;
 
 @end
 

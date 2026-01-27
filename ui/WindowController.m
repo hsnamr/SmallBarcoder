@@ -13,7 +13,6 @@
 #import "BackendFactory.h"
 #import "BarcodeTester.h"
 #import "BarcodeTestResult.h"
-#import "FloatingMenuPanel.h"
 #import "../SmallStep/SmallStep/Core/SmallStep.h"
 
 @interface WindowController (Private)
@@ -68,7 +67,7 @@
 @synthesize currentImage;
 @synthesize originalImage;
 @synthesize originalEncodedData;
-@synthesize floatingMenuPanel;
+@synthesize applicationMenu;
 
 - (instancetype)init {
     self = [super init];
@@ -81,9 +80,10 @@
         currentTestSession = nil;
         [self setupWindow];
         
-        // Create floating menu panel
-        floatingMenuPanel = [[FloatingMenuPanel alloc] initWithWindowController:self];
-        [floatingMenuPanel showPanel];
+        // Create application menu using SmallStep abstraction
+        applicationMenu = [[SSApplicationMenu alloc] initWithDelegate:self];
+        [applicationMenu buildMenu];
+        [applicationMenu showMenu]; // Shows floating panel on Linux, no-op on macOS
         
         // Check ZInt availability and update UI (deferred to next run loop)
         [self performSelector:@selector(checkAndDisplayBackendStatus) withObject:nil afterDelay:0.1];
@@ -124,7 +124,7 @@
     [currentImage release];
     [originalImage release];
     [originalEncodedData release];
-    [floatingMenuPanel release];
+    [applicationMenu release];
     [super dealloc];
 }
 
@@ -482,6 +482,7 @@
         self.originalEncodedData = nil;
         [self.distorter clearDistortions];
         [self.clearDistortionButton setEnabled:NO];
+        [self updateApplicationMenuStates];
         [self.textView setString:[NSString stringWithFormat:@"Image loaded: %@\n\nClick 'Decode' to scan for barcodes, or apply distortions to test decodability.", [url lastPathComponent] ? [url lastPathComponent] : @"from Photos/Files"]];
     } else {
         [self.textView setString:[NSString stringWithFormat:@"Error: Could not load image from:\n%@\n\nPlease ensure the file is a valid image format (JPEG, PNG).", url]];
@@ -500,6 +501,7 @@
         self.originalEncodedData = nil;
         [self.distorter clearDistortions];
         [self.clearDistortionButton setEnabled:NO];
+        [self updateApplicationMenuStates];
         [self.textView setString:[NSString stringWithFormat:@"Image loaded: %@\n\nClick 'Decode' to scan for barcodes, or apply distortions to test decodability.", [url lastPathComponent]]];
     } else {
         // Show error in text view instead of popup
@@ -671,6 +673,7 @@
     // Update UI based on availability
     [self.encodeButton setEnabled:encoderAvailable];
     [self.symbologyPopup setEnabled:encoderAvailable];
+    [self updateApplicationMenuStates];
     
     // Display status message
     NSMutableString *statusMessage = [NSMutableString string];
@@ -817,6 +820,7 @@
     // Clear any previous distortions
     [self.distorter clearDistortions];
     [self.clearDistortionButton setEnabled:NO];
+    [self updateApplicationMenuStates];
     
     NSMutableString *output = [NSMutableString string];
     [output appendString:@"Barcode Encoded Successfully\n"];
@@ -1013,6 +1017,7 @@
         [self.imageView setImage:self.currentImage];
         [self.decodeButton setEnabled:YES];
         [self.clearDistortionButton setEnabled:YES];
+        [self updateApplicationMenuStates];
         
         NSInteger distortionCount = [self.distorter distortions].count;
         [self.textView setString:[NSString stringWithFormat:@"Distortion applied. Total distortions: %ld\n\nYou can apply more distortions or decode the image.", (long)distortionCount]];
@@ -1108,6 +1113,14 @@
     // This could be enhanced to show library list in a separate view
     if (self.loadedLibraries.count > 0) {
         // Libraries are loaded
+    }
+    [self updateApplicationMenuStates];
+}
+
+- (void)updateApplicationMenuStates {
+    // Update application menu states when button states change
+    if (applicationMenu) {
+        [applicationMenu updateMenuStates];
     }
 }
 
@@ -1408,6 +1421,7 @@
     }
     
     [self.exportTestResultsButton setEnabled:YES];
+    [self updateApplicationMenuStates];
     [self.textView setString:output];
 }
 
@@ -1464,9 +1478,9 @@
 }
 
 - (void)windowWillClose:(NSNotification *)notification {
-    // Close floating menu panel
-    if (floatingMenuPanel) {
-        [floatingMenuPanel hidePanel];
+    // Close application menu (floating panel on Linux)
+    if (applicationMenu) {
+        [applicationMenu hideMenu];
     }
     
     // Unload all libraries before closing
@@ -1478,6 +1492,88 @@
     [self.loadedLibraries removeAllObjects];
     
     [NSApp terminate:nil];
+}
+
+#pragma mark - SSApplicationMenuDelegate
+
+- (void)menuOpenImage:(id)sender {
+    [self openImage:sender];
+}
+
+- (void)menuSaveImage:(id)sender {
+    [self saveImage:sender];
+}
+
+- (void)menuDecodeImage:(id)sender {
+    [self decodeImage:sender];
+}
+
+- (void)menuEncodeBarcode:(id)sender {
+    [self encodeBarcode:sender];
+}
+
+- (void)menuApplyDistortion:(id)sender {
+    [self applyDistortion:sender];
+}
+
+- (void)menuPreviewDistortion:(id)sender {
+    [self previewDistortion:sender];
+}
+
+- (void)menuClearDistortion:(id)sender {
+    [self clearDistortion:sender];
+}
+
+- (void)menuTestDecodability:(id)sender {
+    [self testDecodability:sender];
+}
+
+- (void)menuRunProgressiveTest:(id)sender {
+    [self runProgressiveTest:sender];
+}
+
+- (void)menuExportTestResults:(id)sender {
+    [self exportTestResults:sender];
+}
+
+- (void)menuLoadLibrary:(id)sender {
+    [self loadLibrary:sender];
+}
+
+- (BOOL)isSaveImageEnabled {
+    return [self.saveButton isEnabled];
+}
+
+- (BOOL)isDecodeImageEnabled {
+    return [self.decodeButton isEnabled];
+}
+
+- (BOOL)isEncodeBarcodeEnabled {
+    return [self.encodeButton isEnabled];
+}
+
+- (BOOL)isApplyDistortionEnabled {
+    return [self.applyDistortionButton isEnabled];
+}
+
+- (BOOL)isPreviewDistortionEnabled {
+    return [self.previewDistortionButton isEnabled];
+}
+
+- (BOOL)isClearDistortionEnabled {
+    return [self.clearDistortionButton isEnabled];
+}
+
+- (BOOL)isTestDecodabilityEnabled {
+    return [self.testDecodabilityButton isEnabled];
+}
+
+- (BOOL)isRunProgressiveTestEnabled {
+    return [self.runProgressiveTestButton isEnabled];
+}
+
+- (BOOL)isExportTestResultsEnabled {
+    return [self.exportTestResultsButton isEnabled];
 }
 
 @end
