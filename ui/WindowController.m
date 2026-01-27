@@ -30,6 +30,7 @@
 - (void)applyDistortionToCurrentImage;
 - (void)loadLibraryFromURL:(NSURL *)url;
 - (void)updateLibraryStatus;
+- (void)showApplicationMenu;
 
 @end
 
@@ -83,7 +84,8 @@
         // Create application menu using SmallStep abstraction
         applicationMenu = [[SSApplicationMenu alloc] initWithDelegate:self];
         [applicationMenu buildMenu];
-        [applicationMenu showMenu]; // Shows floating panel on Linux, no-op on macOS
+        // Show floating panel after main window is shown (deferred)
+        [self performSelector:@selector(showApplicationMenu) withObject:nil afterDelay:0.2];
         
         // Check ZInt availability and update UI (deferred to next run loop)
         [self performSelector:@selector(checkAndDisplayBackendStatus) withObject:nil afterDelay:0.1];
@@ -1121,6 +1123,13 @@
     // Update application menu states when button states change
     if (applicationMenu) {
         [applicationMenu updateMenuStates];
+    }
+}
+
+- (void)showApplicationMenu {
+    // Show the application menu (floating panel on Linux, no-op on macOS)
+    if (applicationMenu) {
+        [applicationMenu showMenu];
     }
 }
 
