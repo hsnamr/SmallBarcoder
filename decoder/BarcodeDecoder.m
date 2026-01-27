@@ -303,13 +303,14 @@
             }
         }
         
-        // Backend should handle freeing the data, but if it doesn't, we need to free it
-        // For now, we'll free it here since the backend might copy the data
+        // Free the data after backend is done with it
+        // We allocated it, so we're responsible for freeing it
+        // The backend should NOT free it (we pass NULL as cleanup function to ZBar)
         free(rawData);
         return results;
     }
     
-    // No backend available
+    // No backend available - free the data we allocated
     free(rawData);
     return nil;
 #endif

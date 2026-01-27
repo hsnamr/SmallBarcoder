@@ -56,7 +56,9 @@
     
     zbar_image_set_format(image, zbar_fourcc('Y','8','0','0'));
     zbar_image_set_size(image, width, height);
-    zbar_image_set_data(image, data, width * height, zbar_image_free_data);
+    // Don't use zbar_image_free_data - we'll free the data ourselves after ZBar is done
+    // This prevents double-free errors since we allocated the data
+    zbar_image_set_data(image, data, width * height, NULL);
     
     // Scan the image
     int n = zbar_scan_image(scanner, image);
@@ -127,6 +129,8 @@
     }
     
     // Cleanup
+    // Note: We don't free 'data' here because it's owned by the caller (BarcodeDecoder)
+    // The caller will free it after we return
     zbar_image_destroy(image);
     zbar_image_scanner_destroy(scanner);
     
