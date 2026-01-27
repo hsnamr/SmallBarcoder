@@ -247,6 +247,8 @@
     self.symbologyPopup = [[NSPopUpButton alloc] initWithFrame:popupRect pullsDown:NO];
     // Will be populated after encoder initialization
     [self.symbologyPopup addItemWithTitle:@"Loading..."];
+    [self.symbologyPopup setTarget:self];
+    [self.symbologyPopup setAction:@selector(symbologyPopupChanged:)];
     [self.symbologyPopup setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.symbologyPopup];
     
@@ -670,6 +672,11 @@
     // Populate symbology popup
     [self populateSymbologyPopup];
     
+    // Populate symbologies menu
+    if (applicationMenu) {
+        [applicationMenu populateSymbologiesMenu];
+    }
+    
     // Update UI based on availability
     [self.encodeButton setEnabled:encoderAvailable];
     [self.symbologyPopup setEnabled:encoderAvailable];
@@ -751,6 +758,11 @@
     // Select first item by default
     if ([self.symbologyPopup numberOfItems] > 0) {
         [self.symbologyPopup selectItemAtIndex:0];
+    }
+    
+    // Update symbologies menu checkmarks
+    if (applicationMenu) {
+        [applicationMenu updateSymbologyCheckmarks];
     }
 }
 
@@ -1506,6 +1518,51 @@
 
 - (void)menuEncodeBarcode:(id)sender {
     [self encodeBarcode:sender];
+}
+
+- (void)menuSelectSymbology:(id)sender {
+    if ([sender isKindOfClass:[NSMenuItem class]]) {
+        NSMenuItem *item = (NSMenuItem *)sender;
+        int symbologyId = [item tag];
+        
+        // Find and select the corresponding item in the popup
+        NSInteger i;
+        for (i = 0; i < [self.symbologyPopup numberOfItems]; i++) {
+            NSMenuItem *popupItem = [self.symbologyPopup itemAtIndex:i];
+            if ([popupItem tag] == symbologyId) {
+                [self.symbologyPopup selectItemAtIndex:i];
+                break;
+            }
+        }
+        
+        // Update checkmarks
+        if (applicationMenu) {
+            [applicationMenu updateSymbologyCheckmarks];
+        }
+    }
+}
+
+- (NSArray *)getSupportedSymbologies {
+    if ([self.encoder hasBackend]) {
+        return [self.encoder supportedSymbologies];
+    }
+    return [NSArray array];
+}
+
+- (int)getCurrentSymbology {
+    NSInteger selectedIndex = [self.symbologyPopup indexOfSelectedItem];
+    if (selectedIndex >= 0 && selectedIndex < [self.symbologyPopup numberOfItems]) {
+        NSMenuItem *selectedItem = [self.symbologyPopup selectedItem];
+        return [selectedItem tag];
+    }
+    return -1;
+}
+
+- (void)symbologyPopupChanged:(id)sender {
+    // Update menu checkmarks when popup selection changes
+    if (applicationMenu) {
+        [applicationMenu updateSymbologyCheckmarks];
+    }
 }
 
 - (void)menuApplyDistortion:(id)sender {
