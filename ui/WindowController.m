@@ -122,33 +122,42 @@
 }
 
 - (void)setupWindow {
-    // Create window using SmallStep abstraction - make it wider for encoding UI
-    NSRect windowRect = NSMakeRect(100, 100, 900, 700);
+    // Create window using SmallStep abstraction - make it larger for better UI spacing
+    NSRect windowRect = NSMakeRect(100, 100, 1400, 1000);
     NSWindow *window = [[NSWindow alloc] initWithContentRect:windowRect
                                                     styleMask:[SSWindowStyle standardWindowMask]
                                                       backing:NSBackingStoreBuffered
                                                         defer:NO];
     [window setTitle:@"Small Barcode Reader"];
     [window setDelegate:self];
+    [window setMinSize:NSMakeSize(1000, 700)]; // Set minimum window size
     [self setWindow:window];
     
     NSView *contentView = [window contentView];
+    [contentView setAutoresizesSubviews:YES];
     
-    // Create image view
-    NSRect imageViewRect = NSMakeRect(20, 350, 360, 300);
+    // Calculate half height for horizontal split
+    NSRect contentBounds = [contentView bounds];
+    float halfHeight = contentBounds.size.height / 2.0;
+    
+    // UPPER HALF: Image viewer on left, text field on right
+    // Create image view - left side of upper half, resizes with window
+    NSRect imageViewRect = NSMakeRect(20, halfHeight + 10, (contentBounds.size.width / 2.0) - 30, halfHeight - 20);
     self.imageView = [[NSImageView alloc] initWithFrame:imageViewRect];
     [self.imageView setImageAlignment:NSImageAlignCenter];
     [self.imageView setImageScaling:NSImageScaleProportionallyUpOrDown];
     [self.imageView setImageFrameStyle:NSImageFrameGrayBezel];
+    [self.imageView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable | NSViewMinXMargin | NSViewMaxXMargin | NSViewMaxYMargin | NSViewMinYMargin];
     [contentView addSubview:self.imageView];
     
-    // Create text view with scroll view
-    NSRect textScrollRect = NSMakeRect(400, 50, 480, 600);
+    // Create text view with scroll view - right side of upper half, resizes with window
+    NSRect textScrollRect = NSMakeRect((contentBounds.size.width / 2.0) + 10, halfHeight + 10, (contentBounds.size.width / 2.0) - 30, halfHeight - 20);
     self.textScrollView = [[NSScrollView alloc] initWithFrame:textScrollRect];
     [self.textScrollView setHasVerticalScroller:YES];
     [self.textScrollView setHasHorizontalScroller:YES];
     [self.textScrollView setAutohidesScrollers:YES];
     [self.textScrollView setBorderType:NSBezelBorder];
+    [self.textScrollView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable | NSViewMinXMargin | NSViewMaxXMargin | NSViewMaxYMargin | NSViewMinYMargin];
     
     NSRect textViewRect = NSMakeRect(0, 0, [self.textScrollView contentSize].width, [self.textScrollView contentSize].height);
     self.textView = [[NSTextView alloc] initWithFrame:textViewRect];
@@ -187,18 +196,26 @@
     [self.textScrollView setDocumentView:self.textView];
     [contentView addSubview:self.textScrollView];
     
-    // Create open button
-    NSRect buttonRect = NSMakeRect(20, 300, 120, 32);
+    // BOTTOM HALF: All controls and widgets
+    // Layout controls in bottom half, starting from top of bottom half
+    float bottomHalfTop = halfHeight - 10;
+    float currentY = bottomHalfTop;
+    float rowHeight = 35;
+    float spacing = 5;
+    
+    // Row 1: Open and Decode buttons
+    currentY -= rowHeight;
+    NSRect buttonRect = NSMakeRect(20, currentY, 120, 32);
     self.openButton = [[NSButton alloc] initWithFrame:buttonRect];
     [self.openButton setTitle:@"Open Image..."];
     [self.openButton setButtonType:NSMomentaryPushInButton];
     [self.openButton setBezelStyle:NSRoundedBezelStyle];
     [self.openButton setTarget:self];
     [self.openButton setAction:@selector(openImage:)];
+    [self.openButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.openButton];
     
-    // Create decode button
-    NSRect decodeButtonRect = NSMakeRect(150, 300, 120, 32);
+    NSRect decodeButtonRect = NSMakeRect(150, currentY, 120, 32);
     self.decodeButton = [[NSButton alloc] initWithFrame:decodeButtonRect];
     [self.decodeButton setTitle:@"Decode"];
     [self.decodeButton setButtonType:NSMomentaryPushInButton];
@@ -206,25 +223,29 @@
     [self.decodeButton setTarget:self];
     [self.decodeButton setAction:@selector(decodeImage:)];
     [self.decodeButton setEnabled:NO];
+    [self.decodeButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.decodeButton];
     
-    // Create encoding text field
-    NSRect textFieldRect = NSMakeRect(20, 250, 200, 24);
+    // Row 2: Encoding text field and symbology popup
+    currentY -= (rowHeight + spacing);
+    NSRect textFieldRect = NSMakeRect(20, currentY, 300, 24);
     self.encodeTextField = [[NSTextField alloc] initWithFrame:textFieldRect];
     [self.encodeTextField setPlaceholderString:@"Enter text to encode..."];
     [self.encodeTextField setTarget:self];
     [self.encodeTextField setAction:@selector(encodeBarcode:)];
+    [self.encodeTextField setAutoresizingMask:NSViewWidthSizable | NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.encodeTextField];
     
-    // Create symbology popup
-    NSRect popupRect = NSMakeRect(230, 250, 150, 24);
+    NSRect popupRect = NSMakeRect(330, currentY, 200, 24);
     self.symbologyPopup = [[NSPopUpButton alloc] initWithFrame:popupRect pullsDown:NO];
     // Will be populated after encoder initialization
     [self.symbologyPopup addItemWithTitle:@"Loading..."];
+    [self.symbologyPopup setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.symbologyPopup];
     
-    // Create encode button
-    NSRect encodeButtonRect = NSMakeRect(20, 220, 120, 32);
+    // Row 3: Encode and Save buttons
+    currentY -= (rowHeight + spacing);
+    NSRect encodeButtonRect = NSMakeRect(20, currentY, 120, 32);
     self.encodeButton = [[NSButton alloc] initWithFrame:encodeButtonRect];
     [self.encodeButton setTitle:@"Encode"];
     [self.encodeButton setButtonType:NSMomentaryPushInButton];
@@ -232,10 +253,10 @@
     [self.encodeButton setTarget:self];
     [self.encodeButton setAction:@selector(encodeBarcode:)];
     [self.encodeButton setEnabled:NO]; // Will be enabled after backend check
+    [self.encodeButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.encodeButton];
     
-    // Create save button
-    NSRect saveButtonRect = NSMakeRect(150, 220, 120, 32);
+    NSRect saveButtonRect = NSMakeRect(150, currentY, 120, 32);
     self.saveButton = [[NSButton alloc] initWithFrame:saveButtonRect];
     [self.saveButton setTitle:@"Save Image..."];
     [self.saveButton setButtonType:NSMomentaryPushInButton];
@@ -243,53 +264,60 @@
     [self.saveButton setTarget:self];
     [self.saveButton setAction:@selector(saveImage:)];
     [self.saveButton setEnabled:NO];
+    [self.saveButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.saveButton];
     
-    // Distortion controls section
-    // Distortion type popup
-    NSRect distortionPopupRect = NSMakeRect(20, 180, 150, 24);
+    // Row 4: Distortion type popup
+    currentY -= (rowHeight + spacing);
+    NSRect distortionPopupRect = NSMakeRect(20, currentY, 250, 24);
     self.distortionTypePopup = [[NSPopUpButton alloc] initWithFrame:distortionPopupRect pullsDown:NO];
     [self populateDistortionTypePopup];
+    [self.distortionTypePopup setAutoresizingMask:NSViewWidthSizable | NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.distortionTypePopup];
     
-    // Intensity slider
-    NSRect intensitySliderRect = NSMakeRect(20, 150, 200, 20);
+    // Row 5: Intensity slider and label
+    currentY -= (rowHeight + spacing);
+    NSRect intensitySliderRect = NSMakeRect(20, currentY, 300, 20);
     self.distortionIntensitySlider = [[NSSlider alloc] initWithFrame:intensitySliderRect];
     [self.distortionIntensitySlider setMinValue:0.0];
     [self.distortionIntensitySlider setMaxValue:1.0];
     [self.distortionIntensitySlider setDoubleValue:0.5];
     [self.distortionIntensitySlider setTarget:self];
     [self.distortionIntensitySlider setAction:@selector(updateDistortionLabels)];
+    [self.distortionIntensitySlider setAutoresizingMask:NSViewWidthSizable | NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.distortionIntensitySlider];
     
-    // Intensity label
-    NSRect intensityLabelRect = NSMakeRect(230, 150, 100, 20);
+    NSRect intensityLabelRect = NSMakeRect(330, currentY, 150, 20);
     self.distortionIntensityLabel = [[NSTextField alloc] initWithFrame:intensityLabelRect];
     [self.distortionIntensityLabel setEditable:NO];
     [self.distortionIntensityLabel setBordered:NO];
     [self.distortionIntensityLabel setBackgroundColor:[NSColor controlBackgroundColor]];
+    [self.distortionIntensityLabel setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.distortionIntensityLabel];
     
-    // Strength slider
-    NSRect strengthSliderRect = NSMakeRect(20, 120, 200, 20);
+    // Row 6: Strength slider and label
+    currentY -= (rowHeight + spacing);
+    NSRect strengthSliderRect = NSMakeRect(20, currentY, 300, 20);
     self.distortionStrengthSlider = [[NSSlider alloc] initWithFrame:strengthSliderRect];
     [self.distortionStrengthSlider setMinValue:0.0];
     [self.distortionStrengthSlider setMaxValue:1.0];
     [self.distortionStrengthSlider setDoubleValue:0.5];
     [self.distortionStrengthSlider setTarget:self];
     [self.distortionStrengthSlider setAction:@selector(updateDistortionLabels)];
+    [self.distortionStrengthSlider setAutoresizingMask:NSViewWidthSizable | NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.distortionStrengthSlider];
     
-    // Strength label
-    NSRect strengthLabelRect = NSMakeRect(230, 120, 100, 20);
+    NSRect strengthLabelRect = NSMakeRect(330, currentY, 150, 20);
     self.distortionStrengthLabel = [[NSTextField alloc] initWithFrame:strengthLabelRect];
     [self.distortionStrengthLabel setEditable:NO];
     [self.distortionStrengthLabel setBordered:NO];
     [self.distortionStrengthLabel setBackgroundColor:[NSColor controlBackgroundColor]];
+    [self.distortionStrengthLabel setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.distortionStrengthLabel];
     
-    // Apply distortion button
-    NSRect applyDistortionRect = NSMakeRect(20, 90, 100, 32);
+    // Row 7: Distortion action buttons
+    currentY -= (rowHeight + spacing);
+    NSRect applyDistortionRect = NSMakeRect(20, currentY, 120, 32);
     self.applyDistortionButton = [[NSButton alloc] initWithFrame:applyDistortionRect];
     [self.applyDistortionButton setTitle:@"Apply Distortion"];
     [self.applyDistortionButton setButtonType:NSMomentaryPushInButton];
@@ -297,10 +325,10 @@
     [self.applyDistortionButton setTarget:self];
     [self.applyDistortionButton setAction:@selector(applyDistortion:)];
     [self.applyDistortionButton setEnabled:NO];
+    [self.applyDistortionButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.applyDistortionButton];
     
-    // Preview distortion button
-    NSRect previewDistortionRect = NSMakeRect(130, 90, 100, 32);
+    NSRect previewDistortionRect = NSMakeRect(150, currentY, 120, 32);
     self.previewDistortionButton = [[NSButton alloc] initWithFrame:previewDistortionRect];
     [self.previewDistortionButton setTitle:@"Preview"];
     [self.previewDistortionButton setButtonType:NSMomentaryPushInButton];
@@ -308,10 +336,10 @@
     [self.previewDistortionButton setTarget:self];
     [self.previewDistortionButton setAction:@selector(previewDistortion:)];
     [self.previewDistortionButton setEnabled:NO];
+    [self.previewDistortionButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.previewDistortionButton];
     
-    // Clear distortion button
-    NSRect clearDistortionRect = NSMakeRect(240, 90, 100, 32);
+    NSRect clearDistortionRect = NSMakeRect(280, currentY, 120, 32);
     self.clearDistortionButton = [[NSButton alloc] initWithFrame:clearDistortionRect];
     [self.clearDistortionButton setTitle:@"Clear"];
     [self.clearDistortionButton setButtonType:NSMomentaryPushInButton];
@@ -319,23 +347,12 @@
     [self.clearDistortionButton setTarget:self];
     [self.clearDistortionButton setAction:@selector(clearDistortion:)];
     [self.clearDistortionButton setEnabled:NO];
+    [self.clearDistortionButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.clearDistortionButton];
     
-    // Load Library button (only on platforms that support dynamic loading)
-#if !TARGET_OS_IPHONE && !TARGET_OS_WIN32
-    NSRect loadLibraryRect = NSMakeRect(20, 50, 120, 32);
-    self.loadLibraryButton = [[NSButton alloc] initWithFrame:loadLibraryRect];
-    [self.loadLibraryButton setTitle:@"Load Library..."];
-    [self.loadLibraryButton setButtonType:NSMomentaryPushInButton];
-    [self.loadLibraryButton setBezelStyle:NSRoundedBezelStyle];
-    [self.loadLibraryButton setTarget:self];
-    [self.loadLibraryButton setAction:@selector(loadLibrary:)];
-    [contentView addSubview:self.loadLibraryButton];
-#endif
-    
-    // Testing controls section
-    // Test Decodability button
-    NSRect testDecodabilityRect = NSMakeRect(280, 220, 140, 32);
+    // Row 8: Testing controls - Test Decodability button
+    currentY -= (rowHeight + spacing);
+    NSRect testDecodabilityRect = NSMakeRect(20, currentY, 160, 32);
     self.testDecodabilityButton = [[NSButton alloc] initWithFrame:testDecodabilityRect];
     [self.testDecodabilityButton setTitle:@"Test Decodability"];
     [self.testDecodabilityButton setButtonType:NSMomentaryPushInButton];
@@ -343,10 +360,12 @@
     [self.testDecodabilityButton setTarget:self];
     [self.testDecodabilityButton setAction:@selector(testDecodability:)];
     [self.testDecodabilityButton setEnabled:NO];
+    [self.testDecodabilityButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.testDecodabilityButton];
     
-    // Progressive test slider
-    NSRect progressiveSliderRect = NSMakeRect(280, 190, 200, 20);
+    // Row 9: Progressive test slider and label
+    currentY -= (rowHeight + spacing);
+    NSRect progressiveSliderRect = NSMakeRect(20, currentY, 350, 20);
     self.progressiveTestSlider = [[NSSlider alloc] initWithFrame:progressiveSliderRect];
     [self.progressiveTestSlider setMinValue:0.0];
     [self.progressiveTestSlider setMaxValue:1.0];
@@ -354,19 +373,21 @@
     [self.progressiveTestSlider setTarget:self];
     [self.progressiveTestSlider setAction:@selector(progressiveTestSliderChanged:)];
     [self.progressiveTestSlider setEnabled:NO];
+    [self.progressiveTestSlider setAutoresizingMask:NSViewWidthSizable | NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.progressiveTestSlider];
     
-    // Progressive test label
-    NSRect progressiveLabelRect = NSMakeRect(490, 190, 100, 20);
+    NSRect progressiveLabelRect = NSMakeRect(380, currentY, 150, 20);
     self.progressiveTestLabel = [[NSTextField alloc] initWithFrame:progressiveLabelRect];
     [self.progressiveTestLabel setEditable:NO];
     [self.progressiveTestLabel setBordered:NO];
     [self.progressiveTestLabel setBackgroundColor:[NSColor controlBackgroundColor]];
     [self.progressiveTestLabel setStringValue:@"Intensity: 0.00"];
+    [self.progressiveTestLabel setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.progressiveTestLabel];
     
-    // Run Progressive Test button
-    NSRect runProgressiveRect = NSMakeRect(280, 160, 140, 32);
+    // Row 10: Run Progressive Test and Export buttons
+    currentY -= (rowHeight + spacing);
+    NSRect runProgressiveRect = NSMakeRect(20, currentY, 160, 32);
     self.runProgressiveTestButton = [[NSButton alloc] initWithFrame:runProgressiveRect];
     [self.runProgressiveTestButton setTitle:@"Run Progressive Test"];
     [self.runProgressiveTestButton setButtonType:NSMomentaryPushInButton];
@@ -374,10 +395,10 @@
     [self.runProgressiveTestButton setTarget:self];
     [self.runProgressiveTestButton setAction:@selector(runProgressiveTest:)];
     [self.runProgressiveTestButton setEnabled:NO];
+    [self.runProgressiveTestButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.runProgressiveTestButton];
     
-    // Export Test Results button
-    NSRect exportResultsRect = NSMakeRect(430, 160, 140, 32);
+    NSRect exportResultsRect = NSMakeRect(190, currentY, 160, 32);
     self.exportTestResultsButton = [[NSButton alloc] initWithFrame:exportResultsRect];
     [self.exportTestResultsButton setTitle:@"Export Results..."];
     [self.exportTestResultsButton setButtonType:NSMomentaryPushInButton];
@@ -385,7 +406,21 @@
     [self.exportTestResultsButton setTarget:self];
     [self.exportTestResultsButton setAction:@selector(exportTestResults:)];
     [self.exportTestResultsButton setEnabled:NO];
+    [self.exportTestResultsButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [contentView addSubview:self.exportTestResultsButton];
+    
+    // Load Library button (only on platforms that support dynamic loading)
+#if !TARGET_OS_IPHONE && !TARGET_OS_WIN32
+    NSRect loadLibraryRect = NSMakeRect(360, currentY, 120, 32);
+    self.loadLibraryButton = [[NSButton alloc] initWithFrame:loadLibraryRect];
+    [self.loadLibraryButton setTitle:@"Load Library..."];
+    [self.loadLibraryButton setButtonType:NSMomentaryPushInButton];
+    [self.loadLibraryButton setBezelStyle:NSRoundedBezelStyle];
+    [self.loadLibraryButton setTarget:self];
+    [self.loadLibraryButton setAction:@selector(loadLibrary:)];
+    [self.loadLibraryButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
+    [contentView addSubview:self.loadLibraryButton];
+#endif
     
     [self updateDistortionLabels];
 }
