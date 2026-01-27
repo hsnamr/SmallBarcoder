@@ -13,6 +13,7 @@
 #import "BackendFactory.h"
 #import "BarcodeTester.h"
 #import "BarcodeTestResult.h"
+#import "FloatingMenuPanel.h"
 #import "../SmallStep/SmallStep/Core/SmallStep.h"
 
 @interface WindowController (Private)
@@ -67,6 +68,7 @@
 @synthesize currentImage;
 @synthesize originalImage;
 @synthesize originalEncodedData;
+@synthesize floatingMenuPanel;
 
 - (instancetype)init {
     self = [super init];
@@ -78,6 +80,10 @@
         loadedLibraries = [[NSMutableArray alloc] init];
         currentTestSession = nil;
         [self setupWindow];
+        
+        // Create floating menu panel
+        floatingMenuPanel = [[FloatingMenuPanel alloc] initWithWindowController:self];
+        [floatingMenuPanel showPanel];
         
         // Check ZInt availability and update UI (deferred to next run loop)
         [self performSelector:@selector(checkAndDisplayBackendStatus) withObject:nil afterDelay:0.1];
@@ -118,6 +124,7 @@
     [currentImage release];
     [originalImage release];
     [originalEncodedData release];
+    [floatingMenuPanel release];
     [super dealloc];
 }
 
@@ -1457,6 +1464,11 @@
 }
 
 - (void)windowWillClose:(NSNotification *)notification {
+    // Close floating menu panel
+    if (floatingMenuPanel) {
+        [floatingMenuPanel hidePanel];
+    }
+    
     // Unload all libraries before closing
     NSInteger i;
     for (i = 0; i < self.loadedLibraries.count; i++) {

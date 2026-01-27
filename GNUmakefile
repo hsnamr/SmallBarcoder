@@ -65,7 +65,8 @@ SmallBarcodeReader_OBJC_FILES = \
 	core/BackendFactory.m \
 	tester/BarcodeTestResult.m \
 	tester/BarcodeTester.m \
-	ui/WindowController.m
+	ui/WindowController.m \
+	ui/FloatingMenuPanel.m
 
 # Conditionally add ZBar files only if both headers and library are available
 # Skip if DYNAMIC_ONLY=1
@@ -109,7 +110,8 @@ SmallBarcodeReader_HEADER_FILES = \
 	core/BackendFactory.h \
 	tester/BarcodeTestResult.h \
 	tester/BarcodeTester.h \
-	ui/WindowController.h
+	ui/WindowController.h \
+	ui/FloatingMenuPanel.h
 
 # Conditionally add ZBar headers only if headers are available
 ifneq ($(ZBAR_INCLUDE),)
