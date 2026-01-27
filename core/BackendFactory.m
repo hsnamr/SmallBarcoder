@@ -123,15 +123,48 @@
 }
 
 + (id<BarcodeEncoderBackend>)createZIntEncoderFromLibrary:(DynamicLibrary *)library {
-    // Similar to ZBar - requires a wrapper implementation
-    // TODO: Create a dynamic ZInt wrapper that uses dlsym
+    // Check if ZInt symbols are available
+    if (![self libraryContainsZInt:library]) {
+        return nil;
+    }
+    
+    // For now, if the library is loaded and contains ZInt symbols,
+    // we can try to create a BarcodeEncoderZInt instance
+    // This works because BarcodeEncoderZInt uses the ZInt functions directly
+    // which should resolve from the dynamically loaded library
+    
+    // Import the backend class (it should be available if compiled in)
+#if defined(HAVE_ZINT) || __has_include(<zint.h>)
+    // Try to create an instance - the ZInt functions should resolve from the loaded library
+    Class encoderClass = NSClassFromString(@"BarcodeEncoderZInt");
+    if (encoderClass && [encoderClass respondsToSelector:@selector(isAvailable)]) {
+        // Create instance - the library is already loaded, so symbols should resolve
+        id encoder = [[encoderClass alloc] init];
+        if (encoder) {
+            return [encoder autorelease];
+        }
+    }
+#endif
     
     return nil;
 }
 
 + (id<BarcodeDecoderBackend>)createZIntDecoderFromLibrary:(DynamicLibrary *)library {
-    // Similar to ZBar - requires a wrapper implementation
-    // TODO: Create a dynamic ZInt decoder wrapper that uses dlsym
+    // Check if ZInt symbols are available
+    if (![self libraryContainsZInt:library]) {
+        return nil;
+    }
+    
+    // Try to create a BarcodeDecoderZInt instance
+#if defined(HAVE_ZINT) || __has_include(<zint.h>)
+    Class decoderClass = NSClassFromString(@"BarcodeDecoderZInt");
+    if (decoderClass && [decoderClass respondsToSelector:@selector(isAvailable)]) {
+        id decoder = [[decoderClass alloc] init];
+        if (decoder) {
+            return [decoder autorelease];
+        }
+    }
+#endif
     
     return nil;
 }

@@ -1,0 +1,25 @@
+include $(GNUSTEP_MAKEFILES)/common.make
+
+TOOL_NAME = test_zint
+
+test_zint_OBJC_FILES = test_zint.m encoder/BarcodeEncoder.m encoder/BarcodeEncoderZInt.m
+
+test_zint_HEADER_FILES = encoder/BarcodeEncoder.h encoder/BarcodeEncoderBackend.h encoder/BarcodeEncoderZInt.h
+
+test_zint_INCLUDE_DIRS = \
+	-I. \
+	-Iencoder \
+	-Idecoder \
+	-Itester \
+	-Icore \
+	-Iimage \
+	-Iui \
+	-I../SmallStep/SmallStep/Core \
+	-I../SmallStep/SmallStep/Platform/Linux \
+	-I/usr/include
+
+test_zint_OBJCFLAGS = -DHAVE_ZINT=1
+
+test_zint_TOOL_LIBS = -lSmallStep -lzint
+
+include $(GNUSTEP_MAKEFILES)/tool.make

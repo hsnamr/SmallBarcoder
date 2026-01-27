@@ -24,6 +24,7 @@
 - (void)updateEncodedImage:(NSImage *)image;
 - (void)populateSymbologyPopup;
 - (void)populateDistortionTypePopup;
+- (void)checkAndDisplayBackendStatus;
 - (void)saveImageToURL:(NSURL *)url;
 - (void)updateDistortionLabels;
 - (void)applyDistortionToCurrentImage;
@@ -73,8 +74,13 @@
         decoder = [[BarcodeDecoder alloc] init];
         encoder = [[BarcodeEncoder alloc] init];
         distorter = [[ImageDistorter alloc] init];
+        tester = [[BarcodeTester alloc] initWithEncoder:encoder decoder:decoder];
         loadedLibraries = [[NSMutableArray alloc] init];
+        currentTestSession = nil;
         [self setupWindow];
+        
+        // Check ZInt availability and update UI (deferred to next run loop)
+        [self performSelector:@selector(checkAndDisplayBackendStatus) withObject:nil afterDelay:0.1];
     }
     return self;
 }
@@ -213,7 +219,8 @@
     // Create symbology popup
     NSRect popupRect = NSMakeRect(230, 250, 150, 24);
     self.symbologyPopup = [[NSPopUpButton alloc] initWithFrame:popupRect pullsDown:NO];
-    [self populateSymbologyPopup];
+    // Will be populated after encoder initialization
+    [self.symbologyPopup addItemWithTitle:@"Loading..."];
     [contentView addSubview:self.symbologyPopup];
     
     // Create encode button
@@ -224,7 +231,7 @@
     [self.encodeButton setBezelStyle:NSRoundedBezelStyle];
     [self.encodeButton setTarget:self];
     [self.encodeButton setAction:@selector(encodeBarcode:)];
-    [self.encodeButton setEnabled:[self.encoder hasBackend]];
+    [self.encodeButton setEnabled:NO]; // Will be enabled after backend check
     [contentView addSubview:self.encodeButton];
     
     // Create save button
@@ -611,6 +618,57 @@
     }
 }
 
+- (void)checkAndDisplayBackendStatus {
+    // Check encoder backend status
+    BOOL encoderAvailable = [self.encoder hasBackend];
+    NSString *encoderName = [self.encoder backendName];
+    
+    // Populate symbology popup
+    [self populateSymbologyPopup];
+    
+    // Update UI based on availability
+    [self.encodeButton setEnabled:encoderAvailable];
+    [self.symbologyPopup setEnabled:encoderAvailable];
+    
+    // Display status message
+    NSMutableString *statusMessage = [NSMutableString string];
+    [statusMessage appendString:@"SmallBarcoder - Barcode Encoder/Decoder\n"];
+    [statusMessage appendString:@"=====================================\n\n"];
+    
+    if (encoderAvailable) {
+        [statusMessage appendFormat:@"✓ ZInt encoder loaded successfully\n"];
+        [statusMessage appendFormat:@"Backend: %@\n\n", encoderName];
+        
+        NSArray *symbologies = [self.encoder supportedSymbologies];
+        if (symbologies.count > 0) {
+            [statusMessage appendFormat:@"Available barcode types: %ld\n", (long)symbologies.count];
+            [statusMessage appendString:@"\nYou can now:\n"];
+            [statusMessage appendString:@"- Enter text in the encoding field\n"];
+            [statusMessage appendString:@"- Select a barcode type from the dropdown\n"];
+            [statusMessage appendString:@"- Click 'Encode' to generate a barcode\n"];
+        }
+    } else {
+        [statusMessage appendString:@"✗ ZInt encoder not available\n\n"];
+        [statusMessage appendString:@"Please ensure ZInt library is installed:\n"];
+        [statusMessage appendString:@"- Linux: sudo apt-get install libzint-dev\n"];
+        [statusMessage appendString:@"- macOS: brew install zint\n\n"];
+        [statusMessage appendString:@"The library should be linked at build time."];
+    }
+    
+    // Check decoder backend status
+    BOOL decoderAvailable = [self.decoder hasBackend];
+    NSString *decoderName = [self.decoder backendName];
+    
+    [statusMessage appendString:@"\n\n"];
+    if (decoderAvailable) {
+        [statusMessage appendFormat:@"✓ Decoder backend: %@\n", decoderName];
+    } else {
+        [statusMessage appendString:@"✗ No decoder backend available\n"];
+    }
+    
+    [self.textView setString:statusMessage];
+}
+
 - (void)populateSymbologyPopup {
     [self.symbologyPopup removeAllItems];
     
@@ -621,7 +679,7 @@
     }
     
     NSArray *symbologies = [self.encoder supportedSymbologies];
-    if (symbologies.count == 0) {
+    if (!symbologies || symbologies.count == 0) {
         [self.symbologyPopup addItemWithTitle:@"No symbologies available"];
         [self.symbologyPopup setEnabled:NO];
         return;
@@ -631,15 +689,23 @@
     NSInteger i;
     for (i = 0; i < symbologies.count; i++) {
         NSDictionary *symbology = [symbologies objectAtIndex:i];
+        if (!symbology) continue;
+        
         NSString *name = [symbology objectForKey:@"name"];
-        if (name) {
+        if (name && name.length > 0) {
             [self.symbologyPopup addItemWithTitle:name];
             // Store symbology ID in menu item's tag
             NSNumber *symbologyId = [symbology objectForKey:@"id"];
             if (symbologyId) {
-                [[self.symbologyPopup itemAtIndex:i] setTag:[symbologyId intValue]];
+                NSInteger itemIndex = [self.symbologyPopup numberOfItems] - 1;
+                [[self.symbologyPopup itemAtIndex:itemIndex] setTag:[symbologyId intValue]];
             }
         }
+    }
+    
+    // Select first item by default
+    if ([self.symbologyPopup numberOfItems] > 0) {
+        [self.symbologyPopup selectItemAtIndex:0];
     }
 }
 
@@ -1000,6 +1066,55 @@
     // This could be enhanced to show library list in a separate view
     if (self.loadedLibraries.count > 0) {
         // Libraries are loaded
+    }
+}
+
+- (void)tryAutoLoadZIntLibrary {
+    // Check if encoder already has a backend
+    if ([self.encoder hasBackend]) {
+        return; // Already have a backend
+    }
+    
+    // Try to find and load ZInt library
+    NSString *zintPath = [DynamicLibraryLoader findLibrary:@"zint"];
+    if (!zintPath) {
+        // Try common locations
+        NSArray *searchPaths = [DynamicLibraryLoader standardSearchPaths];
+        NSInteger i;
+        for (i = 0; i < searchPaths.count; i++) {
+            NSString *searchPath = [searchPaths objectAtIndex:i];
+            NSString *testPath = [searchPath stringByAppendingPathComponent:@"libzint.so"];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:testPath]) {
+                zintPath = testPath;
+                break;
+            }
+            // Also try versioned names
+            testPath = [searchPath stringByAppendingPathComponent:@"libzint.so.2"];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:testPath]) {
+                zintPath = testPath;
+                break;
+            }
+            testPath = [searchPath stringByAppendingPathComponent:@"libzint.so.2.15"];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:testPath]) {
+                zintPath = testPath;
+                break;
+            }
+        }
+    }
+    
+    if (zintPath) {
+        NSError *error = nil;
+        DynamicLibrary *library = [DynamicLibraryLoader loadLibraryAtPath:zintPath error:&error];
+        if (library) {
+            [self.loadedLibraries addObject:library];
+            
+            // Try to register backends from the library
+            NSDictionary *backends = [BackendFactory scanLibraryForBackends:library];
+            id encoderBackend = [backends objectForKey:@"encoder"];
+            if (encoderBackend) {
+                [self.encoder registerDynamicBackend:encoderBackend];
+            }
+        }
     }
 }
 

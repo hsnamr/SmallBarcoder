@@ -131,8 +131,16 @@ NSString * const BarcodeEncoderOptionBackgroundColor = @"backgroundColor";
 }
 
 - (NSArray *)supportedSymbologies {
-    if (_backend && [_backend respondsToSelector:@selector(supportedSymbologies)]) {
-        return [_backend performSelector:@selector(supportedSymbologies)];
+    if (_backend) {
+        // Try instance method first
+        if ([_backend respondsToSelector:@selector(supportedSymbologies)]) {
+            return [_backend performSelector:@selector(supportedSymbologies)];
+        }
+        // Try class method
+        Class backendClass = [_backend class];
+        if (backendClass && [backendClass respondsToSelector:@selector(supportedSymbologies)]) {
+            return [backendClass performSelector:@selector(supportedSymbologies)];
+        }
     }
     return [NSArray array];
 }
