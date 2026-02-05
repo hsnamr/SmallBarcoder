@@ -2,7 +2,7 @@
 //  AppDelegate.m
 //  SmallBarcodeReader
 //
-//  Application delegate implementation
+//  Application delegate implementation (SSAppDelegate).
 //
 
 #import "AppDelegate.h"
@@ -12,12 +12,13 @@
 
 @synthesize windowController;
 
-- (void)applicationDidFinishLaunching:(NSNotification *)notification {
+- (void)applicationDidFinishLaunching {
     self.windowController = [[WindowController alloc] init];
     [self.windowController showWindow:nil];
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(id)sender {
+    (void)sender;
     return YES;
 }
 

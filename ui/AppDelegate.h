@@ -2,16 +2,17 @@
 //  AppDelegate.h
 //  SmallBarcodeReader
 //
-//  Application delegate
+//  Application delegate (SSAppDelegate): lifecycle and main window.
 //
 
 #import <AppKit/AppKit.h>
+#import "SSAppDelegate.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
 @class WindowController;
 
-@interface AppDelegate : NSObject <NSApplicationDelegate> {
+@interface AppDelegate : NSObject <SSAppDelegate> {
     WindowController *windowController;
 }
 
